@@ -143,19 +143,26 @@ func SummaryPrompt(isDir bool, pkg string, all []Entry) string {
 }
 
 // EditPrompt instructs a completion model to return ONLY the rewritten region.
-func EditPrompt(file, region, instruction string) string {
+// context, when non-empty, is surrounding code the model may consult but must
+// not reproduce (see [BuildContext]).
+func EditPrompt(file, region, instruction, context string) string {
 	var b strings.Builder
 	b.WriteString("You are a code-transformation function, NOT an assistant.\n")
 	fmt.Fprintf(&b, "Apply the instruction to the %s region below and output ONLY the replacement code.\n", LangOf(file))
 	b.WriteString("Hard rules: no explanation, no preamble, no commentary, no markdown fences — ")
 	b.WriteString("output exactly what should replace the region and nothing else. ")
 	b.WriteString("If the instruction means the code should be removed, output nothing at all.\n\n")
+	if context != "" {
+		fmt.Fprintf(&b, "Surrounding code, for reference only (do NOT reproduce it — output only the new region):\n%s\n\n", context)
+	}
 	fmt.Fprintf(&b, "Instruction: %s\n\nRegion:\n%s\n", instruction, region)
 	return b.String()
 }
 
-// GeneratePrompt instructs a completion model to return ONLY a new file's contents.
-func GeneratePrompt(file, instruction string) string {
+// GeneratePrompt instructs a completion model to return ONLY a new file's
+// contents. context, when non-empty, is existing code to match conventions
+// against but not reproduce (see [BuildContext]).
+func GeneratePrompt(file, instruction, context string) string {
 	var b strings.Builder
 	b.WriteString("You are a code-generation function, NOT an assistant.\n")
 	if lang := LangOf(file); lang != "" {
@@ -165,26 +172,42 @@ func GeneratePrompt(file, instruction string) string {
 	}
 	b.WriteString("Hard rules: output ONLY the file's contents — no explanation, no preamble, no commentary, no markdown fences. ")
 	b.WriteString("Output exactly what should be saved to the file and nothing else.\n\n")
+	if context != "" {
+		fmt.Fprintf(&b, "Existing project code, for reference (match its conventions; do NOT reproduce it):\n%s\n\n", context)
+	}
 	fmt.Fprintf(&b, "Instruction: %s\n", instruction)
 	return b.String()
 }
 
 // AgentEditTask builds the instruction for an agent backend that edits the file
 // itself. A blank region means an INSERTION at line a, not a transformation.
-func AgentEditTask(file string, a, b int, region, instruction string) string {
+// context, when non-empty, is appended as background the agent may consult.
+func AgentEditTask(file string, a, b int, region, instruction, context string) string {
+	var task string
 	if strings.TrimSpace(region) == "" {
-		return fmt.Sprintf("Edit the file %s in place. At line %d the content is blank — INSERT new code there, exactly at that location, per this instruction:\n\nInstruction: %s\n\nPlace the code at line %d; do not relocate it elsewhere and do not modify unrelated code. Save the file.",
+		task = fmt.Sprintf("Edit the file %s in place. At line %d the content is blank — INSERT new code there, exactly at that location, per this instruction:\n\nInstruction: %s\n\nPlace the code at line %d; do not relocate it elsewhere and do not modify unrelated code. Save the file.",
 			file, a, instruction, a)
+	} else {
+		task = fmt.Sprintf("Edit the file %s in place at lines %d-%d. The current code there is:\n\n%s\n\nApply exactly this change: %s\nModify only that region; leave unrelated code untouched. Save the file.",
+			file, a, b, region, instruction)
 	}
-	return fmt.Sprintf("Edit the file %s in place at lines %d-%d. The current code there is:\n\n%s\n\nApply exactly this change: %s\nModify only that region; leave unrelated code untouched. Save the file.",
-		file, a, b, region, instruction)
+	return withContext(task, context)
 }
 
 // AgentGenerateTask builds the instruction for an agent backend that creates the
 // new file itself rather than returning text to write.
-func AgentGenerateTask(file, instruction string) string {
-	return fmt.Sprintf("Create a new file at %s per this instruction:\n\nInstruction: %s\n\nWrite only that one file; do not modify or create any other file. Save it.",
+func AgentGenerateTask(file, instruction, context string) string {
+	task := fmt.Sprintf("Create a new file at %s per this instruction:\n\nInstruction: %s\n\nWrite only that one file; do not modify or create any other file. Save it.",
 		file, instruction)
+	return withContext(task, context)
+}
+
+// withContext appends reference context to an agent task, if any.
+func withContext(task, context string) string {
+	if context == "" {
+		return task
+	}
+	return task + "\n\nFor reference, other code in scope:\n" + context
 }
 
 // LangOf names the language of file from its extension ("" if unknown).

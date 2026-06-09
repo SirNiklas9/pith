@@ -27,9 +27,9 @@ import (
 
 func main() {
 	args := os.Args[1:]
-	var jsonOut, grepOut, apply, raw, recursive, allFlag bool
+	var jsonOut, grepOut, vsOut, apply, raw, recursive, allFlag bool
 	var backend pith.Backend
-	var rangeArg, promptArg, atArg string
+	var rangeArg, promptArg, atArg, contextArg string
 	var pos []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -45,6 +45,8 @@ func main() {
 			jsonOut = true
 		case a == "--grep":
 			grepOut = true
+		case a == "--vs":
+			vsOut = true
 		case a == "--apply":
 			apply = true
 		case a == "--raw":
@@ -81,6 +83,10 @@ func main() {
 			promptArg = val()
 		case strings.HasPrefix(a, "--prompt="):
 			promptArg = strings.TrimPrefix(a, "--prompt=")
+		case a == "--context":
+			contextArg = val()
+		case strings.HasPrefix(a, "--context="):
+			contextArg = strings.TrimPrefix(a, "--context=")
 		default:
 			pos = append(pos, a)
 		}
@@ -89,8 +95,8 @@ func main() {
 		"  pith read     <file.go|dir> [name] [--grep|--json]\n" +
 		"  pith search   <query> [dir] [-r] [--json]            deterministic; add --cmd/--api/--agent for AI\n" +
 		"  pith summary  <file.go|dir> --cmd \"<llm>\"\n" +
-		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw]\n" +
-		"  pith generate <newfile> --prompt \"...\" --cmd \"<llm>\" [--apply]\n" +
+		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project]\n" +
+		"  pith generate <newfile> --prompt \"...\" --cmd \"<llm>\" [--apply] [--context file|dir|project]\n" +
 		"  pith work     [add \"<note>\" [--at file:line] | done <id> | rm <id> | clear | --all]"
 	if len(pos) == 0 {
 		die(usage)
@@ -117,6 +123,8 @@ func main() {
 		switch {
 		case jsonOut:
 			_ = r.WriteJSON(os.Stdout)
+		case vsOut:
+			r.WriteVS(os.Stdout)
 		case grepOut:
 			r.WriteGrep(os.Stdout)
 		default:
@@ -138,9 +146,12 @@ func main() {
 				return
 			}
 			res := pith.Result{All: matches}
-			if jsonOut {
+			switch {
+			case jsonOut:
 				_ = res.WriteJSON(os.Stdout)
-			} else {
+			case vsOut:
+				res.WriteVS(os.Stdout)
+			default:
 				res.WriteGrep(os.Stdout)
 			}
 			return
@@ -163,12 +174,12 @@ func main() {
 		if backend.None() {
 			die(pith.NoBackendMsg)
 		}
-		editCmd(target, rangeArg, promptArg, backend, apply, raw)
+		editCmd(target, rangeArg, promptArg, backend, apply, raw, contextArg)
 	case "generate", "gen":
 		if backend.None() {
 			die(pith.NoBackendMsg)
 		}
-		generateCmd(target, promptArg, backend, apply, raw)
+		generateCmd(target, promptArg, backend, apply, raw, contextArg)
 	default:
 		die("pith: unknown command", cmd)
 	}
@@ -177,7 +188,7 @@ func main() {
 // editCmd sends a line range + an instruction to the backend and applies the
 // result. Diff by default (review), --apply writes it, --raw prints just the
 // new region (for an editor to replace the selection with).
-func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw bool) {
+func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw bool, ctxLevel string) {
 	if rangeArg == "" || prompt == "" {
 		die("pith edit needs --range A:B and --prompt \"...\"")
 	}
@@ -194,11 +205,15 @@ func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw boo
 		die(fmt.Sprintf("pith: range %d:%d out of bounds (file has %d lines)", a, b, len(lines)))
 	}
 	region := strings.Join(lines[a-1:b], "\n")
+	context, err := pith.BuildContext(file, ctxLevel)
+	if err != nil {
+		die("pith:", err)
+	}
 
 	// AGENT backend: hand it the task and let the agent edit the file ITSELF —
 	// its native mode. pith does not splice; the caller reloads the file after.
 	if backend.IsAgent() {
-		out, err := backend.RunAgent(pith.AgentEditTask(file, a, b, region, prompt))
+		out, err := backend.RunAgent(pith.AgentEditTask(file, a, b, region, prompt, context))
 		if err != nil {
 			die("pith: agent failed:", err)
 		}
@@ -210,7 +225,7 @@ func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw boo
 	}
 
 	// COMPLETION backend: get the rewritten region, splice it.
-	out, err := backend.Run(pith.EditPrompt(file, region, prompt))
+	out, err := backend.Run(pith.EditPrompt(file, region, prompt, context))
 	if err != nil {
 		die("pith: backend failed:", err)
 	}
@@ -237,17 +252,21 @@ func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw boo
 // same-file context, no search: that is all opt-in and lives behind an explicit
 // flag, never automatic. Refuses to overwrite a non-empty file (use edit for
 // those); an empty file is fillable, so the editor "New File → fill" flow works.
-func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool) {
+func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool, ctxLevel string) {
 	if prompt == "" {
 		die("pith generate needs --prompt \"...\"")
 	}
 	if fi, err := os.Stat(file); err == nil && fi.Size() > 0 {
 		die(fmt.Sprintf("pith: %s already exists and is not empty — use `pith edit` for existing files", file))
 	}
+	context, err := pith.BuildContext(file, ctxLevel)
+	if err != nil {
+		die("pith:", err)
+	}
 
 	// AGENT backend: let the agent create the file ITSELF; pith does not write.
 	if backend.IsAgent() {
-		out, err := backend.RunAgent(pith.AgentGenerateTask(file, prompt))
+		out, err := backend.RunAgent(pith.AgentGenerateTask(file, prompt, context))
 		if err != nil {
 			die("pith: agent failed:", err)
 		}
@@ -259,7 +278,7 @@ func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool) {
 	}
 
 	// COMPLETION backend: get the file content, write it.
-	out, err := backend.Run(pith.GeneratePrompt(file, prompt))
+	out, err := backend.Run(pith.GeneratePrompt(file, prompt, context))
 	if err != nil {
 		die("pith: backend failed:", err)
 	}

@@ -9,10 +9,6 @@ package pith
 import (
 	"encoding/json"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/printer"
-	"go/token"
 	"io"
 	"os"
 	"path/filepath"
@@ -42,10 +38,11 @@ type Result struct {
 	IsDir  bool               // true if Target was a directory
 }
 
-// Gather parses target (a Go file, or a directory of Go files) into a Result.
+// Gather parses target (a source file, or a directory of source files) into a
+// Result using tree-sitter — any language pith bundles a grammar for. In
+// directory mode it reads every recognized code file (skipping tests and data).
 // If only is non-empty, just the declaration of that name is kept.
 func Gather(target, only string) (Result, error) {
-	fset := token.NewFileSet()
 	r := Result{Target: target, ByFile: map[string][]Entry{}}
 
 	info, statErr := os.Stat(target)
@@ -57,7 +54,10 @@ func Gather(target, only string) (Result, error) {
 		}
 		for _, en := range ents {
 			n := en.Name()
-			if en.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			if en.IsDir() || skipFile(n) {
+				continue
+			}
+			if _, ok := langFor(n); !ok {
 				continue
 			}
 			r.Files = append(r.Files, filepath.Join(target, n))
@@ -68,12 +68,22 @@ func Gather(target, only string) (Result, error) {
 	}
 
 	for _, f := range r.Files {
-		es, name, e := parseFile(fset, f, only)
+		src, e := os.ReadFile(f)
 		if e != nil {
 			if !r.IsDir {
 				return r, e
 			}
-			continue // skip a bad file inside a package, keep going
+			continue
+		}
+		es, name, e := declsFromSource(f, src)
+		if e != nil {
+			if !r.IsDir {
+				return r, e
+			}
+			continue // skip a bad/unsupported file inside a dir, keep going
+		}
+		if only != "" {
+			es = filterByName(es, only)
 		}
 		if r.Pkg == "" {
 			r.Pkg = name
@@ -84,59 +94,15 @@ func Gather(target, only string) (Result, error) {
 	return r, nil
 }
 
-// parseFile parses one Go file into declarations (optionally just `only`).
-func parseFile(fset *token.FileSet, file, only string) (entries []Entry, pkg string, err error) {
-	f, err := parser.ParseFile(fset, file, nil, parser.ParseComments)
-	if err != nil {
-		return nil, "", err
-	}
-	pkg = f.Name.Name
-	for _, d := range f.Decls {
-		switch decl := d.(type) {
-		case *ast.FuncDecl:
-			if only != "" && decl.Name.Name != only {
-				continue
-			}
-			kind, recv, recvSig := "func", "", ""
-			if decl.Recv != nil && len(decl.Recv.List) > 0 {
-				kind = "method"
-				recv = "(" + nodeStr(fset, decl.Recv.List[0].Type) + ")"
-				recvSig = recv + " "
-			}
-			entries = append(entries, Entry{
-				File: file,
-				Line: fset.Position(decl.Pos()).Line,
-				Kind: kind,
-				Recv: recv,
-				Name: decl.Name.Name,
-				Sig:  recvSig + decl.Name.Name + sigStr(fset, decl.Type),
-				What: firstLine(decl.Doc),
-			})
-		case *ast.GenDecl:
-			for _, spec := range decl.Specs {
-				ts, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				if only != "" && ts.Name.Name != only {
-					continue
-				}
-				what := firstLine(ts.Doc)
-				if what == "" {
-					what = firstLine(decl.Doc)
-				}
-				entries = append(entries, Entry{
-					File: file,
-					Line: fset.Position(ts.Pos()).Line,
-					Kind: "type",
-					Name: ts.Name.Name,
-					Sig:  "type " + ts.Name.Name,
-					What: what,
-				})
-			}
+// filterByName keeps only the declarations named want.
+func filterByName(es []Entry, want string) []Entry {
+	out := es[:0]
+	for _, e := range es {
+		if e.Name == want {
+			out = append(out, e)
 		}
 	}
-	return entries, pkg, nil
+	return out
 }
 
 // WriteText renders the human-facing purpose map to w: a package as
@@ -162,6 +128,14 @@ func (r Result) WriteGrep(w io.Writer) {
 	}
 }
 
+// WriteVS renders one line per declaration as "file(line): sig — what", the
+// form the Visual Studio Output window makes double-click navigable.
+func (r Result) WriteVS(w io.Writer) {
+	for _, e := range r.All {
+		fmt.Fprintf(w, "%s(%d): %s — %s\n", e.File, e.Line, e.Sig, orUndoc(e.What))
+	}
+}
+
 // WriteJSON renders the flat declaration list as indented JSON.
 func (r Result) WriteJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
@@ -172,7 +146,11 @@ func (r Result) WriteJSON(w io.Writer) error {
 // renderDir prints a package header, then each file as a type-grouped section.
 // File headers (▌ relpath) are how the editor jumps across files.
 func renderDir(w io.Writer, dir string, files []string, byFile map[string][]Entry, pkg string, total int) {
-	fmt.Fprintf(w, "package %s  (%d files, %d decls)\n", pkg, len(files), total)
+	header := shortPath(dir)
+	if pkg != "" {
+		header = "package " + pkg
+	}
+	fmt.Fprintf(w, "%s  (%d files, %d decls)\n", header, len(files), total)
 	for _, f := range files {
 		es := byFile[f]
 		if len(es) == 0 {
@@ -286,30 +264,6 @@ func orUndoc(s string) string {
 		return "(undocumented)"
 	}
 	return s
-}
-
-// firstLine returns the first line of a doc comment, trimmed. "" if none.
-func firstLine(cg *ast.CommentGroup) string {
-	if cg == nil {
-		return ""
-	}
-	t := strings.TrimSpace(cg.Text())
-	if i := strings.IndexByte(t, '\n'); i >= 0 {
-		t = t[:i]
-	}
-	return strings.TrimSpace(t)
-}
-
-// sigStr renders a function type as "(params) results" (drops the "func").
-func sigStr(fset *token.FileSet, ft *ast.FuncType) string {
-	return strings.TrimPrefix(nodeStr(fset, ft), "func")
-}
-
-// nodeStr printer-prints any AST node to a single whitespace-collapsed line.
-func nodeStr(fset *token.FileSet, n ast.Node) string {
-	var b strings.Builder
-	_ = printer.Fprint(&b, fset, n)
-	return strings.Join(strings.Fields(b.String()), " ")
 }
 
 // shortPath keeps the last two path segments (parent/file) for the header.
