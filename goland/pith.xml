@@ -1,0 +1,42 @@
+<toolSet name="pith">
+  <tool name="read" description="pith: purpose overview (clickable)" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="true" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
+    <exec>
+      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="PARAMETERS" value="read &quot;$FilePath$&quot; --grep" />
+      <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+    </exec>
+    <filter>
+      <option name="NAME" value="pith file line" />
+      <option name="DESCRIPTION" value="make file:line clickable" />
+      <option name="REGEXP" value="$FILE_PATH$:$LINE$" />
+    </filter>
+  </tool>
+  <tool name="read package" description="pith: purpose overview of the package" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
+    <exec>
+      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="PARAMETERS" value="read &quot;$FileDir$&quot;" />
+      <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+    </exec>
+  </tool>
+  <tool name="summary" description="pith: AI summary of the current file" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
+    <exec>
+      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="PARAMETERS" value="summary &quot;$FilePath$&quot; --agent &quot;claude --dangerously-skip-permissions -p&quot;" />
+      <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+    </exec>
+  </tool>
+  <tool name="edit: add godoc" description="pith: add a doc comment to the selection" showInMainMenu="true" showInEditor="true" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="false" showConsoleOnStdErr="true" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="PARAMETERS" value="edit &quot;$FilePath$&quot; --range $SelectionStartLine$:$SelectionEndLine$ --prompt &quot;add a concise Go doc comment to each declaration in the selection; change nothing else&quot; --agent &quot;claude --dangerously-skip-permissions -p&quot;" />
+      <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+    </exec>
+  </tool>
+  <tool name="generate: table test" description="pith: generate a table-driven test file" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="false" showConsoleOnStdErr="true" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="PARAMETERS" value="generate &quot;$FilePath$&quot; --prompt &quot;a table-driven Go test skeleton for this package&quot; --apply --agent &quot;claude --dangerously-skip-permissions -p&quot;" />
+      <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+    </exec>
+  </tool>
+</toolSet>

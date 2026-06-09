@@ -1,0 +1,327 @@
+package pith
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+// NoBackendMsg explains the backends a user can choose. pith never picks a paid
+// backend for you — you name one with [Backend], or the AI ops refuse.
+const NoBackendMsg = "this needs an AI backend you choose:\n" +
+	"  AGENT (edits files itself — best for `edit`):\n" +
+	"    --agent \"claude --dangerously-skip-permissions -p\"   Claude Code\n" +
+	"    --agent \"codex exec --full-auto\"                       Codex\n" +
+	"  COMPLETION (returns text — splices/prints):\n" +
+	"    --api ollama --model llama3        local (offline, free)\n" +
+	"    --api openai --model gpt-4o-mini   (env OPENAI_API_KEY)\n" +
+	"    --cmd \"ollama run llama3\"           local CLI"
+
+// Backend is the user-chosen AI backend. Exactly one of API, Cmd, or Agent is
+// normally set; an empty Backend ([Backend.None] is true) refuses every AI op
+// so nothing is ever silently billed.
+type Backend struct {
+	Cmd   string // a CLI whose stdin is the prompt (e.g. "ollama run llama3")
+	API   string // an OpenAI-compatible preset or base URL (e.g. "openai")
+	Model string // the model name, for API backends
+	Agent string // an agent CLI that edits files itself (e.g. "claude -p")
+}
+
+// None reports whether no backend was chosen (every AI op should refuse).
+func (b Backend) None() bool { return b.Cmd == "" && b.API == "" && b.Agent == "" }
+
+// IsAgent reports whether the agent backend is set — the one that edits files
+// itself rather than returning text for pith to splice.
+func (b Backend) IsAgent() bool { return b.Agent != "" }
+
+// Run sends prompt to a completion-style backend and returns its text. The API
+// backend wins if set, then a --cmd, then the agent treated as a command (its
+// stdout is captured — agents answer questions fine). Use [Backend.RunAgent]
+// when you instead want the agent to edit a file itself.
+func (b Backend) Run(prompt string) (string, error) {
+	if b.API != "" {
+		base, keyEnv := resolveAPI(b.API)
+		key := ""
+		if keyEnv != "" {
+			key = os.Getenv(keyEnv)
+		}
+		return runAPI(base, b.Model, key, prompt)
+	}
+	cmd := b.Cmd
+	if cmd == "" {
+		cmd = b.Agent // agents answer questions fine — capture their stdout
+	}
+	return runCommand(cmd, prompt)
+}
+
+// RunAgent hands task to the agent backend, which edits files itself, and
+// returns the agent's stdout (its narration, if any).
+func (b Backend) RunAgent(task string) (string, error) {
+	return runCommand(b.Agent, task)
+}
+
+// Summarize gathers target and asks the backend for a 2–4 sentence gestalt of
+// the deterministic digest (not the raw code — cheap and grounded). Returns an
+// error if there is nothing to summarize or the backend has no choice set.
+func Summarize(target, only string, b Backend) (string, error) {
+	if b.None() {
+		return "", fmt.Errorf("no AI backend chosen")
+	}
+	r, err := Gather(target, only)
+	if err != nil {
+		return "", err
+	}
+	if len(r.All) == 0 {
+		return "", fmt.Errorf("nothing to summarize in %s", target)
+	}
+	out, err := b.Run(SummaryPrompt(r.IsDir, r.Pkg, r.All))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// SearchAI gathers the declarations under target (its subtree if recursive) and
+// asks the backend which are most relevant to query, ranked, over the
+// deterministic digest. Opt-in twice over: it reads only what you point it at,
+// and it runs only because you supplied a backend.
+func SearchAI(target, query string, recursive bool, b Backend) (string, error) {
+	if b.None() {
+		return "", fmt.Errorf("no AI backend chosen")
+	}
+	all, err := collect(target, recursive)
+	if err != nil {
+		return "", err
+	}
+	if len(all) == 0 {
+		return "", fmt.Errorf("no Go declarations under %s", target)
+	}
+	out, err := b.Run(SearchPrompt(query, all))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// SearchPrompt asks a model to rank the digest by relevance to query. The model
+// answers over the file:line digest, not the raw code, so it stays grounded and
+// every hit it names is locatable.
+func SearchPrompt(query string, all []Entry) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "A developer is looking for: %s\n", query)
+	b.WriteString("From the declarations below, list the ones that are actually relevant, most relevant first, each on its own line as `file:line — why it matches`. Use ONLY the list below; do not invent anything. If none are relevant, reply exactly: no matches.\n\n")
+	for _, e := range all {
+		fmt.Fprintf(&b, "%s:%d  %s %s — %s\n", e.File, e.Line, e.Kind, e.Name, orUndoc(e.What))
+	}
+	return b.String()
+}
+
+// SummaryPrompt builds the LLM prompt from the deterministic digest — the model
+// summarizes the *digest*, not the raw code, so it's cheap and grounded.
+func SummaryPrompt(isDir bool, pkg string, all []Entry) string {
+	kind := "file"
+	if isDir {
+		kind = "package"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Summarize this Go %s for a developer orienting on unfamiliar code.\n", kind)
+	b.WriteString("Using ONLY the declarations and doc-comments below, write 2-4 sentences: what it is for and how it is organized. Be concrete; do not invent details that aren't present.\n\n")
+	if isDir && pkg != "" {
+		fmt.Fprintf(&b, "package %s\n", pkg)
+	}
+	for _, e := range all {
+		fmt.Fprintf(&b, "- %s %s — %s\n", e.Kind, e.Name, orUndoc(e.What))
+	}
+	return b.String()
+}
+
+// EditPrompt instructs a completion model to return ONLY the rewritten region.
+func EditPrompt(file, region, instruction string) string {
+	var b strings.Builder
+	b.WriteString("You are a code-transformation function, NOT an assistant.\n")
+	fmt.Fprintf(&b, "Apply the instruction to the %s region below and output ONLY the replacement code.\n", LangOf(file))
+	b.WriteString("Hard rules: no explanation, no preamble, no commentary, no markdown fences — ")
+	b.WriteString("output exactly what should replace the region and nothing else. ")
+	b.WriteString("If the instruction means the code should be removed, output nothing at all.\n\n")
+	fmt.Fprintf(&b, "Instruction: %s\n\nRegion:\n%s\n", instruction, region)
+	return b.String()
+}
+
+// GeneratePrompt instructs a completion model to return ONLY a new file's contents.
+func GeneratePrompt(file, instruction string) string {
+	var b strings.Builder
+	b.WriteString("You are a code-generation function, NOT an assistant.\n")
+	if lang := LangOf(file); lang != "" {
+		fmt.Fprintf(&b, "Write the complete contents of a new %s file named %s.\n", lang, filepath.Base(file))
+	} else {
+		fmt.Fprintf(&b, "Write the complete contents of a new file named %s.\n", filepath.Base(file))
+	}
+	b.WriteString("Hard rules: output ONLY the file's contents — no explanation, no preamble, no commentary, no markdown fences. ")
+	b.WriteString("Output exactly what should be saved to the file and nothing else.\n\n")
+	fmt.Fprintf(&b, "Instruction: %s\n", instruction)
+	return b.String()
+}
+
+// AgentEditTask builds the instruction for an agent backend that edits the file
+// itself. A blank region means an INSERTION at line a, not a transformation.
+func AgentEditTask(file string, a, b int, region, instruction string) string {
+	if strings.TrimSpace(region) == "" {
+		return fmt.Sprintf("Edit the file %s in place. At line %d the content is blank — INSERT new code there, exactly at that location, per this instruction:\n\nInstruction: %s\n\nPlace the code at line %d; do not relocate it elsewhere and do not modify unrelated code. Save the file.",
+			file, a, instruction, a)
+	}
+	return fmt.Sprintf("Edit the file %s in place at lines %d-%d. The current code there is:\n\n%s\n\nApply exactly this change: %s\nModify only that region; leave unrelated code untouched. Save the file.",
+		file, a, b, region, instruction)
+}
+
+// AgentGenerateTask builds the instruction for an agent backend that creates the
+// new file itself rather than returning text to write.
+func AgentGenerateTask(file, instruction string) string {
+	return fmt.Sprintf("Create a new file at %s per this instruction:\n\nInstruction: %s\n\nWrite only that one file; do not modify or create any other file. Save it.",
+		file, instruction)
+}
+
+// LangOf names the language of file from its extension ("" if unknown).
+func LangOf(file string) string {
+	switch strings.ToLower(filepath.Ext(file)) {
+	case ".go":
+		return "Go"
+	case ".py":
+		return "Python"
+	case ".ts", ".tsx":
+		return "TypeScript"
+	case ".js", ".jsx":
+		return "JavaScript"
+	case ".rs":
+		return "Rust"
+	case ".c", ".h", ".cpp", ".cc":
+		return "C/C++"
+	case ".cs":
+		return "C#"
+	default:
+		return ""
+	}
+}
+
+// StripFences removes a leading ```lang and trailing ``` if a model added them.
+func StripFences(s string) string {
+	t := strings.TrimSpace(s)
+	if !strings.HasPrefix(t, "```") {
+		return s
+	}
+	ls := strings.Split(t, "\n")
+	ls = ls[1:] // drop opening fence
+	for len(ls) > 0 && strings.TrimSpace(ls[len(ls)-1]) == "```" {
+		ls = ls[:len(ls)-1]
+	}
+	return strings.Join(ls, "\n")
+}
+
+// ParseRange parses "A:B" (1-based, inclusive) line numbers.
+func ParseRange(s string) (int, int, error) {
+	p := strings.SplitN(s, ":", 2)
+	if len(p) != 2 {
+		return 0, 0, fmt.Errorf("bad range %q (want A:B)", s)
+	}
+	a, e1 := strconv.Atoi(strings.TrimSpace(p[0]))
+	b, e2 := strconv.Atoi(strings.TrimSpace(p[1]))
+	if e1 != nil || e2 != nil {
+		return 0, 0, fmt.Errorf("bad range %q (want A:B)", s)
+	}
+	return a, b, nil
+}
+
+// resolveAPI maps a preset (or a raw base URL) to a base URL + the env var that
+// holds the API key. Empty keyEnv means no auth (local servers).
+func resolveAPI(api string) (base, keyEnv string) {
+	switch api {
+	case "openai":
+		return "https://api.openai.com/v1", "OPENAI_API_KEY"
+	case "openrouter":
+		return "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"
+	case "ollama":
+		return "http://localhost:11434/v1", ""
+	default:
+		return strings.TrimRight(api, "/"), "PITH_API_KEY"
+	}
+}
+
+// runAPI calls an OpenAI-compatible /chat/completions endpoint and returns the
+// message content.
+func runAPI(base, model, key, prompt string) (string, error) {
+	if model == "" {
+		return "", fmt.Errorf("--api needs --model")
+	}
+	reqBody, _ := json.Marshal(map[string]any{
+		"model":       model,
+		"messages":    []map[string]string{{"role": "user", "content": prompt}},
+		"temperature": 0,
+	})
+	req, err := http.NewRequest("POST", strings.TrimRight(base, "/")+"/chat/completions", bytes.NewReader(reqBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("api %d: %s", resp.StatusCode, strings.TrimSpace(string(rb)))
+	}
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(rb, &out); err != nil {
+		return "", err
+	}
+	if len(out.Choices) == 0 {
+		return "", fmt.Errorf("api: no choices in response")
+	}
+	return out.Choices[0].Message.Content, nil
+}
+
+// runCommand pipes prompt to a backend command's stdin (or substitutes a {}
+// placeholder argument) and returns its stdout.
+func runCommand(cmdline, prompt string) (string, error) {
+	parts := strings.Fields(cmdline)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("empty command")
+	}
+	viaArg := false
+	for i, p := range parts {
+		if p == "{}" {
+			parts[i] = prompt
+			viaArg = true
+		}
+	}
+	c := exec.Command(parts[0], parts[1:]...)
+	if !viaArg {
+		c.Stdin = strings.NewReader(prompt)
+	}
+	var out, errb bytes.Buffer
+	c.Stdout = &out
+	c.Stderr = &errb
+	if err := c.Run(); err != nil {
+		if s := strings.TrimSpace(errb.String()); s != "" {
+			return "", fmt.Errorf("%v: %s", err, s)
+		}
+		return "", err
+	}
+	return out.String(), nil
+}

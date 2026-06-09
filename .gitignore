@@ -1,0 +1,5 @@
+# built binary
+/pith.exe
+
+# personal, code-anchored work list (per-checkout, not shared)
+.pith-work.json
