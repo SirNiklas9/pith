@@ -15,7 +15,7 @@ abstract class PithAction(text: String, description: String) : AnAction(text, de
         e.presentation.isEnabled = e.project != null
     }
 
-    protected fun runPith(e: AnActionEvent, args: List<String>) {
+    protected fun runPith(e: AnActionEvent, args: List<String>, onDone: () -> Unit = {}) {
         val project = e.project ?: return
         val workDir = project.basePath ?: return
 
@@ -24,10 +24,10 @@ abstract class PithAction(text: String, description: String) : AnAction(text, de
         PithToolWindowFactory.print(project, "pith ${args.joinToString(" ")}\n\n")
 
         PithRunner.run(
-            args    = args,
-            workDir = workDir,
+            args     = args,
+            workDir  = workDir,
             onOutput = { text -> PithToolWindowFactory.print(project, text) },
-            onDone   = {}
+            onDone   = onDone
         )
     }
 }

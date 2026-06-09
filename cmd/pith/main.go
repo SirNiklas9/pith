@@ -236,14 +236,10 @@ func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw boo
 	// AGENT backend: hand it the task and let the agent edit the file ITSELF —
 	// its native mode. pith does not splice; the caller reloads the file after.
 	if backend.IsAgent() {
-		out, err := backend.RunAgent(pith.AgentEditTask(file, a, b, region, prompt, context))
-		if err != nil {
+		if err := backend.RunAgentStreaming(pith.AgentEditTask(file, a, b, region, prompt, context)); err != nil {
 			die("pith: agent failed:", err)
 		}
 		fmt.Fprintf(os.Stderr, "pith: agent ran on %s (lines %d:%d) — reload the file\n", file, a, b)
-		if raw && strings.TrimSpace(out) != "" {
-			fmt.Print(out) // surface the agent's narration if asked
-		}
 		return
 	}
 
@@ -289,14 +285,10 @@ func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool, ctx
 
 	// AGENT backend: let the agent create the file ITSELF; pith does not write.
 	if backend.IsAgent() {
-		out, err := backend.RunAgent(pith.AgentGenerateTask(file, prompt, context))
-		if err != nil {
+		if err := backend.RunAgentStreaming(pith.AgentGenerateTask(file, prompt, context)); err != nil {
 			die("pith: agent failed:", err)
 		}
 		fmt.Fprintf(os.Stderr, "pith: agent ran to create %s — check it in\n", file)
-		if raw && strings.TrimSpace(out) != "" {
-			fmt.Print(out)
-		}
 		return
 	}
 

@@ -67,6 +67,31 @@ func (b Backend) RunAgent(task string) (string, error) {
 	return runCommand(b.Agent, task)
 }
 
+// RunAgentStreaming hands task to the agent backend and streams its output
+// directly to os.Stdout/os.Stderr. Unlike RunAgent, this does not create
+// internal pipes, so cmd.Wait returns as soon as the agent process exits —
+// no hang waiting for orphaned child processes to release inherited handles.
+func (b Backend) RunAgentStreaming(task string) error {
+	parts := strings.Fields(b.Agent)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty agent command")
+	}
+	viaArg := false
+	for i, p := range parts {
+		if p == "{}" {
+			parts[i] = task
+			viaArg = true
+		}
+	}
+	c := exec.Command(parts[0], parts[1:]...)
+	if !viaArg {
+		c.Stdin = strings.NewReader(task)
+	}
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
+}
+
 // Summarize gathers target and asks the backend for a 2–4 sentence gestalt of
 // the deterministic digest (not the raw code — cheap and grounded). Returns an
 // error if there is nothing to summarize or the backend has no choice set.

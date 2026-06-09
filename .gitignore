@@ -3,3 +3,7 @@
 
 # personal, code-anchored work list (per-checkout, not shared)
 .pith-work.json
+
+# jetbrains plugin build artifacts
+jetbrains/.gradle/
+jetbrains/build/

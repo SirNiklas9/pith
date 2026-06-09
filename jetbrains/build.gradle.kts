@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.pith"
-version = "0.1.0"
+version = "0.2.0"
 
 repositories {
     mavenCentral()
@@ -22,6 +22,7 @@ kotlin {
 
 tasks {
     buildSearchableOptions { enabled = false }
+    instrumentCode         { enabled = false }
     patchPluginXml {
         sinceBuild.set("241")
         untilBuild.set("")

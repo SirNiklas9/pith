@@ -6,19 +6,10 @@
       "type": "shell",
       "command": "pith",
       "args": ["read", "${file}", "--grep"],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "focus": false
-      },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": false },
       "problemMatcher": {
         "owner": "pith",
-        "pattern": {
-          "regexp": "^(.+):(\\d+):",
-          "file": 1,
-          "line": 2,
-          "message": 3
-        }
+        "pattern": { "regexp": "^(.+):(\\d+):", "file": 1, "line": 2, "message": 3 }
       }
     },
     {
@@ -26,11 +17,7 @@
       "type": "shell",
       "command": "pith",
       "args": ["read", "${fileDirname}"],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "focus": false
-      },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": false },
       "problemMatcher": []
     },
     {
@@ -38,19 +25,10 @@
       "type": "shell",
       "command": "pith",
       "args": ["search", "${input:searchQuery}", "${workspaceFolder}", "-r"],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "focus": false
-      },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": false },
       "problemMatcher": {
         "owner": "pith",
-        "pattern": {
-          "regexp": "^(.+):(\\d+):",
-          "file": 1,
-          "line": 2,
-          "message": 3
-        }
+        "pattern": { "regexp": "^(.+):(\\d+):", "file": 1, "line": 2, "message": 3 }
       }
     },
     {
@@ -58,11 +36,23 @@
       "type": "shell",
       "command": "pith",
       "args": ["summary", "${file}", "--agent", "claude --dangerously-skip-permissions -p"],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "focus": true
-      },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "pith: explain at cursor",
+      "type": "shell",
+      "command": "pith",
+      "args": ["explain", "${file}:${lineNumber}", "--agent", "claude --dangerously-skip-permissions -p"],
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "pith: explain by name",
+      "type": "shell",
+      "command": "pith",
+      "args": ["explain", "${file}", "${input:explainName}", "--agent", "claude --dangerously-skip-permissions -p"],
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
       "problemMatcher": []
     },
     {
@@ -76,11 +66,7 @@
         "--agent", "claude --dangerously-skip-permissions -p",
         "--apply"
       ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "focus": true
-      },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
       "problemMatcher": []
     },
     {
@@ -93,39 +79,33 @@
         "--agent", "claude --dangerously-skip-permissions -p",
         "--apply"
       ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "focus": true
-      },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "pith: work list",
+      "type": "shell",
+      "command": "pith",
+      "args": ["work"],
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "pith: work add at cursor",
+      "type": "shell",
+      "command": "pith",
+      "args": ["work", "add", "${input:workNote}", "--at", "${file}:${lineNumber}"],
+      "presentation": { "reveal": "always", "panel": "shared", "focus": false },
       "problemMatcher": []
     }
   ],
   "inputs": [
-    {
-      "id": "searchQuery",
-      "type": "promptString",
-      "description": "Search query"
-    },
-    {
-      "id": "editRange",
-      "type": "promptString",
-      "description": "Line range to edit (e.g. 10:30)"
-    },
-    {
-      "id": "editPrompt",
-      "type": "promptString",
-      "description": "Edit instruction"
-    },
-    {
-      "id": "newFile",
-      "type": "promptString",
-      "description": "New file path (relative to workspace)"
-    },
-    {
-      "id": "generatePrompt",
-      "type": "promptString",
-      "description": "What to generate"
-    }
+    { "id": "searchQuery",    "type": "promptString", "description": "Search query" },
+    { "id": "explainName",    "type": "promptString", "description": "Declaration name to explain" },
+    { "id": "editRange",      "type": "promptString", "description": "Line range to edit (e.g. 10:30)" },
+    { "id": "editPrompt",     "type": "promptString", "description": "Edit instruction" },
+    { "id": "newFile",        "type": "promptString", "description": "New file path (relative to workspace)" },
+    { "id": "generatePrompt", "type": "promptString", "description": "What to generate" },
+    { "id": "workNote",       "type": "promptString", "description": "Work note to add" }
   ]
 }

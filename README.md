@@ -68,17 +68,23 @@ A simple list of notes you leave yourself, optionally pinned to a file and line.
 
 ### AI ops
 
-These three ops use an AI tool you name. They do nothing without one — you're never billed silently.
+These four ops use an AI tool you name. They do nothing without one — you're never billed silently.
 
 ```
+pith explain main.go Server --cmd "ollama run llama3"
+pith explain main.go:34 --cmd "ollama run llama3"
 pith summary main.go --cmd "ollama run llama3"
 pith edit parse.go --range 10:30 --prompt "add error handling" --cmd "ollama run llama3"
 pith generate services/cache.go --prompt "an LRU cache" --apply --cmd "ollama run llama3"
 ```
 
-`edit` shows a diff by default. Add `--apply` to write it. Add `--raw` for just the new code.
+**explain** points the AI at a single declaration's full source. It tells you what it does, why it exists, and what callers need to know — more depth than `read`, narrower than `summary`. Pass a name or a `file:line` position.
 
-`generate` creates a new file. It won't overwrite one that already has content.
+**summary** gives a prose overview of an entire file or folder.
+
+**edit** shows a diff by default. Add `--apply` to write it. Add `--raw` for just the new code.
+
+**generate** creates a new file. It won't overwrite one that already has content.
 
 #### Picking an AI tool
 
@@ -109,9 +115,9 @@ By default, only your selected lines and prompt are sent to the AI. If you want 
 
 pith is a plain binary — any editor can run it as an external tool. Pick yours:
 
-- **[Neovim](nvim/README.md)** — floating overview window, jump-to-declaration, summary float, visual edit
-- **[JetBrains](jetbrains/README.md)** — native plugin for any JetBrains IDE; all seven ops, real input dialogs, clickable tool window output (build from `jetbrains/`)
-- **[Visual Studio](visualstudio/README.md)** — External Tools (add by hand, registry-based)
+- **[Neovim](nvim/README.md)** — floating windows for all ops, jump-to-declaration, visual edit
+- **[JetBrains](jetbrains/README.md)** — native plugin for any JetBrains IDE; all ops, real input dialogs, clickable tool window
+- **[Visual Studio](visualstudio/README.md)** — External Tools for read/search/summary/explain; edit/generate via the integrated terminal
 - **[VS Code](vscode/README.md)** — tasks with free-text prompts, keyboard shortcuts
 
 ---

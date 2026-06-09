@@ -1,7 +1,9 @@
 package pith.plugin.actions
 
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFileManager
 import pith.plugin.PithSettings
 
@@ -20,8 +22,15 @@ class GenerateAction : PithAction("Generate File...", "Generate a new file from 
         ) ?: return
 
         val fullPath = "$basePath/$relPath"
-        runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--agent", agent, "--apply"))
 
-        VirtualFileManager.getInstance().asyncRefresh(null)
+        runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--agent", agent, "--apply")) {
+            // Refresh VFS then open the new file — the Runnable fires after refresh completes
+            VirtualFileManager.getInstance().asyncRefresh {
+                val newFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(fullPath)
+                if (newFile != null) {
+                    FileEditorManager.getInstance(project).openFile(newFile, true)
+                }
+            }
+        }
     }
 }
