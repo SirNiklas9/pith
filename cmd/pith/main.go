@@ -92,9 +92,11 @@ func main() {
 		}
 	}
 	usage := "usage:\n" +
-		"  pith read     <file.go|dir> [name] [--grep|--json]\n" +
+		"  pith read     <file|dir> [name] [--grep|--json]\n" +
 		"  pith search   <query> [dir] [-r] [--json]            deterministic; add --cmd/--api/--agent for AI\n" +
-		"  pith summary  <file.go|dir> --cmd \"<llm>\"\n" +
+		"  pith explain  <file> <name> --cmd \"<llm>\"            deep explanation of one declaration\n" +
+		"  pith explain  <file:line>  --cmd \"<llm>\"\n" +
+		"  pith summary  <file|dir> --cmd \"<llm>\"\n" +
 		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project]\n" +
 		"  pith generate <newfile> --prompt \"...\" --cmd \"<llm>\" [--apply] [--context file|dir|project]\n" +
 		"  pith work     [add \"<note>\" [--at file:line] | done <id> | rm <id> | clear | --all]"
@@ -157,6 +159,27 @@ func main() {
 			return
 		}
 		out, err := pith.SearchAI(dir, query, recursive, backend)
+		if err != nil {
+			die("pith:", err)
+		}
+		fmt.Println(out)
+	case "explain":
+		if backend.None() {
+			die(pith.NoBackendMsg)
+		}
+		file, name, line := target, only, 0
+		if name == "" {
+			// check if target is file:line
+			f, l := parseAt(target)
+			if l > 0 {
+				file, line = f, l
+			}
+		}
+		ctx, err := pith.BuildContext(file, contextArg)
+		if err != nil {
+			die("pith:", err)
+		}
+		out, err := pith.Explain(file, name, line, ctx, backend)
 		if err != nil {
 			die("pith:", err)
 		}

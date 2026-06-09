@@ -1,0 +1,27 @@
+package pith.plugin.actions
+
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.vfs.VirtualFileManager
+import pith.plugin.PithSettings
+
+class GenerateAction : PithAction("Generate File...", "Generate a new file from a prompt") {
+    override fun actionPerformed(e: AnActionEvent) {
+        val project  = e.project ?: return
+        val basePath = project.basePath ?: return
+        val agent    = PithSettings.getInstance().state.agentCommand
+
+        val relPath = Messages.showInputDialog(
+            project, "New file path (relative to project root):", "pith generate", null
+        ) ?: return
+
+        val prompt = Messages.showInputDialog(
+            project, "What to generate:", "pith generate — $relPath", null
+        ) ?: return
+
+        val fullPath = "$basePath/$relPath"
+        runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--agent", agent, "--apply"))
+
+        VirtualFileManager.getInstance().asyncRefresh(null)
+    }
+}

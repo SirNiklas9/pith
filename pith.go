@@ -18,13 +18,14 @@ import (
 
 // Entry is one declaration's pith: where it is, what it is, what it's for.
 type Entry struct {
-	File string `json:"file"`
-	Line int    `json:"line"`
-	Kind string `json:"kind"` // func | method | type
-	Recv string `json:"recv,omitempty"`
-	Name string `json:"name"`
-	Sig  string `json:"sig"`
-	What string `json:"what"` // first line of the doc comment; "" if undocumented
+	File   string `json:"file"`
+	Line   int    `json:"line"`
+	Kind   string `json:"kind"` // func | method | type
+	Recv   string `json:"recv,omitempty"`
+	Name   string `json:"name"`
+	Sig    string `json:"sig"`
+	What   string `json:"what"`   // first line of the doc comment; "" if undocumented
+	Source string `json:"source"` // full declaration source text, for explain
 }
 
 // Result is the parsed pith of a file or a package: the flat list of

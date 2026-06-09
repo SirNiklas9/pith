@@ -46,12 +46,13 @@ func declsFromSource(file string, src []byte) (entries []Entry, pkg string, err 
 			return // anonymous/wrapper node (function_type, struct_type, …)
 		}
 		e := Entry{
-			File: file,
-			Line: int(c.StartPoint().Row) + 1,
-			Kind: kind,
-			Name: name.Text(src),
-			Sig:  firstLineTrim(c.Text(src)),
-			What: docAbove(c, src, lang),
+			File:   file,
+			Line:   int(c.StartPoint().Row) + 1,
+			Kind:   kind,
+			Name:   name.Text(src),
+			Sig:    firstLineTrim(c.Text(src)),
+			What:   docAbove(c, src, lang),
+			Source: c.Text(src),
 		}
 		if kind == "method" && recv != "" {
 			e.Recv = "(" + recv + ")"

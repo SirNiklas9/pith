@@ -110,6 +110,60 @@ func SearchAI(target, query string, recursive bool, b Backend) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// Explain finds a named declaration (or the one at a given line) in file and
+// asks the backend for a plain-prose explanation of what it does and how it
+// works — deeper than summary because it sends the actual source, not the digest.
+// Pass name="" and line>0 to look up by line; pass name non-empty to look up by name.
+func Explain(file, name string, line int, context string, b Backend) (string, error) {
+	if b.None() {
+		return "", fmt.Errorf("no AI backend chosen")
+	}
+	r, err := Gather(file, name)
+	if err != nil {
+		return "", err
+	}
+	var e *Entry
+	if name != "" {
+		if len(r.All) == 0 {
+			return "", fmt.Errorf("no declaration %q in %s", name, file)
+		}
+		cp := r.All[0]
+		e = &cp
+	} else {
+		for i := range r.All {
+			if r.All[i].Line <= line {
+				cp := r.All[i]
+				e = &cp
+			}
+		}
+		if e == nil {
+			return "", fmt.Errorf("no declaration at or before line %d in %s", line, file)
+		}
+	}
+	out, err := b.Run(ExplainPrompt(file, e.Name, e.Source, context))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// ExplainPrompt builds the prompt for explaining one declaration in depth.
+// Unlike summary (which works from the digest), explain sends the full source.
+func ExplainPrompt(file, name, source, context string) string {
+	var b strings.Builder
+	if lang := LangOf(file); lang != "" {
+		fmt.Fprintf(&b, "Explain this %s declaration to a developer reading unfamiliar code.\n", lang)
+	} else {
+		b.WriteString("Explain this declaration to a developer reading unfamiliar code.\n")
+	}
+	b.WriteString("Write 3–6 sentences of plain prose: what it does, how it works, and when you would use it. Be specific to the actual code. No filler.\n\n")
+	if context != "" {
+		fmt.Fprintf(&b, "Surrounding code, for reference:\n%s\n\n", context)
+	}
+	fmt.Fprintf(&b, "%s:\n%s\n", name, source)
+	return b.String()
+}
+
 // SearchPrompt asks a model to rank the digest by relevance to query. The model
 // answers over the file:line digest, not the raw code, so it stays grounded and
 // every hit it names is locatable.

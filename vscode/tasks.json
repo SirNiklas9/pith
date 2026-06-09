@@ -1,0 +1,131 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "pith: read file",
+      "type": "shell",
+      "command": "pith",
+      "args": ["read", "${file}", "--grep"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": {
+        "owner": "pith",
+        "pattern": {
+          "regexp": "^(.+):(\\d+):",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      }
+    },
+    {
+      "label": "pith: read folder",
+      "type": "shell",
+      "command": "pith",
+      "args": ["read", "${fileDirname}"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "pith: search",
+      "type": "shell",
+      "command": "pith",
+      "args": ["search", "${input:searchQuery}", "${workspaceFolder}", "-r"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false
+      },
+      "problemMatcher": {
+        "owner": "pith",
+        "pattern": {
+          "regexp": "^(.+):(\\d+):",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      }
+    },
+    {
+      "label": "pith: summary",
+      "type": "shell",
+      "command": "pith",
+      "args": ["summary", "${file}", "--agent", "claude --dangerously-skip-permissions -p"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "pith: edit selection",
+      "type": "shell",
+      "command": "pith",
+      "args": [
+        "edit", "${file}",
+        "--range", "${input:editRange}",
+        "--prompt", "${input:editPrompt}",
+        "--agent", "claude --dangerously-skip-permissions -p",
+        "--apply"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "pith: generate file",
+      "type": "shell",
+      "command": "pith",
+      "args": [
+        "generate", "${input:newFile}",
+        "--prompt", "${input:generatePrompt}",
+        "--agent", "claude --dangerously-skip-permissions -p",
+        "--apply"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "searchQuery",
+      "type": "promptString",
+      "description": "Search query"
+    },
+    {
+      "id": "editRange",
+      "type": "promptString",
+      "description": "Line range to edit (e.g. 10:30)"
+    },
+    {
+      "id": "editPrompt",
+      "type": "promptString",
+      "description": "Edit instruction"
+    },
+    {
+      "id": "newFile",
+      "type": "promptString",
+      "description": "New file path (relative to workspace)"
+    },
+    {
+      "id": "generatePrompt",
+      "type": "promptString",
+      "description": "What to generate"
+    }
+  ]
+}

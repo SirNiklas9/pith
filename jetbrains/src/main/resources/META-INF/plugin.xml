@@ -1,0 +1,55 @@
+<idea-plugin>
+  <id>io.pith</id>
+  <name>pith</name>
+  <vendor>Nicholas Harris</vendor>
+  <description>The pith of your code. Read, search, explain, and edit any codebase via the pith CLI.</description>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationService serviceImplementation="pith.plugin.PithSettings"/>
+    <applicationConfigurable instance="pith.plugin.PithConfigurable" displayName="pith" id="io.pith.settings"/>
+    <toolWindow id="pith" anchor="bottom" factoryClass="pith.plugin.PithToolWindowFactory" canCloseContents="false"/>
+  </extensions>
+
+  <actions>
+    <group id="pith.ActionGroup" text="pith" popup="true">
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+
+      <action id="pith.Read" class="pith.plugin.actions.ReadAction"
+              text="Read File" description="Purpose overview of the current file">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt O"/>
+      </action>
+
+      <action id="pith.ReadPackage" class="pith.plugin.actions.ReadPackageAction"
+              text="Read Package" description="Purpose overview of the whole package or folder">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift O"/>
+      </action>
+
+      <action id="pith.Search" class="pith.plugin.actions.SearchAction"
+              text="Search..." description="Search the project for a query">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt F"/>
+      </action>
+
+      <action id="pith.Explain" class="pith.plugin.actions.ExplainAction"
+              text="Explain" description="Deep explanation of the selected declaration">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt X"/>
+      </action>
+
+      <action id="pith.Summary" class="pith.plugin.actions.SummaryAction"
+              text="Summary" description="AI summary of the current file">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt S"/>
+      </action>
+
+      <action id="pith.Edit" class="pith.plugin.actions.EditAction"
+              text="Edit Selection..." description="AI edit of the selected region">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt E"/>
+      </action>
+
+      <action id="pith.Generate" class="pith.plugin.actions.GenerateAction"
+              text="Generate File..." description="Generate a new file from a prompt">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt G"/>
+      </action>
+    </group>
+  </actions>
+</idea-plugin>
