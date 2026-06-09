@@ -1,0 +1,27 @@
+[
+  {
+    "key": "ctrl+alt+o",
+    "command": "workbench.action.tasks.runTask",
+    "args": "pith: read file"
+  },
+  {
+    "key": "ctrl+alt+shift+o",
+    "command": "workbench.action.tasks.runTask",
+    "args": "pith: read folder"
+  },
+  {
+    "key": "ctrl+alt+f",
+    "command": "workbench.action.tasks.runTask",
+    "args": "pith: search"
+  },
+  {
+    "key": "ctrl+alt+s",
+    "command": "workbench.action.tasks.runTask",
+    "args": "pith: summary"
+  },
+  {
+    "key": "ctrl+alt+e",
+    "command": "workbench.action.tasks.runTask",
+    "args": "pith: edit selection"
+  }
+]

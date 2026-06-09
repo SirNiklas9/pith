@@ -1,50 +1,80 @@
 # pith.nvim
 
-A floating **purpose map** of the current file — every declaration's *purpose*,
-at a glance, grouped by type. The one thing your outline plugin (aerial / LSP
-`documentSymbol`) doesn't give you: names you already get, *purposes inline* you
-don't.
+A floating **purpose map** of the current file — every declaration's purpose, one line each, grouped by type. Jump to any declaration with `<CR>`.
 
-It is a thin wrapper over the [`pith`](../) CLI. It does **not** do
-outline / search / navigation — use aerial, Telescope, and LSP for those. This
-is purpose-overview only.
+Works on any language (Go, Python, TypeScript, C#, Rust, C, C++, and 200 more).
 
-## Install (lazy.nvim, local dir)
+---
+
+## Install
+
+**1. Build the binary**
+
+```
+cd /path/to/pith
+go build -o pith ./cmd/pith        # Linux / macOS
+go build -o pith.exe ./cmd/pith    # Windows
+```
+
+**2. Add to your lazy.nvim config**
 
 ```lua
 {
-  dir = "C:/Users/Nicholas/GolandProjects/pith/nvim",
+  dir = "/path/to/pith/nvim",
   config = function()
     require("pith").setup({
-      -- full path to the built binary (or just "pith" if it's on your PATH)
-      bin = "C:/Users/Nicholas/GolandProjects/pith/pith.exe",
+      bin = "/path/to/pith/pith",  -- full path to the built binary
     })
-    vim.keymap.set("n", "<leader>po", require("pith").overview,
-      { desc = "pith: purpose overview" })
+
+    local p = require("pith")
+    vim.keymap.set("n", "<leader>po", p.overview, { desc = "pith: overview" })
+    vim.keymap.set("n", "<leader>ps", p.summary,  { desc = "pith: summary" })
+    vim.keymap.set("v", "<leader>pe", p.edit,     { desc = "pith: edit selection" })
   end,
 }
 ```
 
-Build the binary first:
+Requires Neovim 0.10+ (uses `vim.system` for async).
 
-```
-go build -C C:/Users/Nicholas/GolandProjects/pith -o pith.exe .
-```
+---
 
-## Use
+## Keys
 
-- `<leader>po` — open the purpose map of the current Go file.
-- `<CR>` on a row — jump to that declaration.
-- `q` / `<Esc>` — close.
+| Key | What it does |
+|---|---|
+| `<leader>po` | Open the purpose map for the current file |
+| `<CR>` (inside map) | Jump to that declaration |
+| `q` / `<Esc>` | Close |
+| `<leader>ps` | AI summary of the current file (needs a backend) |
+| `<leader>pe` | AI edit of the visual selection (needs a backend) |
 
-(Today the CLI parses Go; other languages come later. Non-Go buffers will
-report a parse error.)
+---
 
 ## Options
 
-| key      | default     | meaning                                       |
-| -------- | ----------- | --------------------------------------------- |
-| `bin`    | `"pith"`    | path to the pith executable                   |
-| `width`  | `0.7`       | float width as a fraction of editor columns   |
-| `height` | `0.7`       | float height as a fraction of editor lines    |
-| `border` | `"rounded"` | float border style                            |
+```lua
+require("pith").setup({
+  bin          = "pith",      -- path to pith binary (or just "pith" if on PATH)
+  width        = 0.7,         -- float width (fraction of editor width)
+  height       = 0.7,         -- float height (fraction of editor height)
+  border       = "rounded",   -- float border style
+  backend_args = {},          -- extra args passed to AI ops, e.g. {"--agent", "claude -p"}
+  agent        = false,       -- set true if backend_args uses --agent
+})
+```
+
+---
+
+## AI ops
+
+`summary` and `edit` need a backend. Set it in setup:
+
+```lua
+require("pith").setup({
+  bin          = "/path/to/pith",
+  backend_args = {"--agent", "claude --dangerously-skip-permissions -p"},
+  agent        = true,
+})
+```
+
+Or swap for a local model: `backend_args = {"--cmd", "ollama run llama3"}`.
