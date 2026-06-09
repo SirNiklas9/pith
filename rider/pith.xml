@@ -1,7 +1,7 @@
 <toolSet name="pith">
   <tool name="read" description="pith: purpose overview (clickable)" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="true" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
     <exec>
-      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="COMMAND" value="C:\tools\pith\pith.exe" />
       <option name="PARAMETERS" value="read &quot;$FilePath$&quot; --grep" />
       <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
     </exec>
@@ -11,16 +11,16 @@
       <option name="REGEXP" value="$FILE_PATH$:$LINE$" />
     </filter>
   </tool>
-  <tool name="read package" description="pith: purpose overview of the package" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
+  <tool name="read package" description="pith: purpose overview of the folder" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
     <exec>
-      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="COMMAND" value="C:\tools\pith\pith.exe" />
       <option name="PARAMETERS" value="read &quot;$FileDir$&quot;" />
       <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
     </exec>
   </tool>
-  <tool name="search" description="pith: search the project for the selected text" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
+  <tool name="search" description="pith: search the project (prompts is not supported; edit the query in this tool)" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
     <exec>
-      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="COMMAND" value="C:\tools\pith\pith.exe" />
       <option name="PARAMETERS" value="search &quot;$SelectedText$&quot; &quot;$ProjectFileDir$&quot; -r" />
       <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
     </exec>
@@ -32,15 +32,15 @@
   </tool>
   <tool name="summary" description="pith: AI summary of the current file" showInMainMenu="true" showInEditor="true" showInProject="true" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="false">
     <exec>
-      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
+      <option name="COMMAND" value="C:\tools\pith\pith.exe" />
       <option name="PARAMETERS" value="summary &quot;$FilePath$&quot; --agent &quot;claude --dangerously-skip-permissions -p&quot;" />
       <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
     </exec>
   </tool>
-  <tool name="edit: add doc comment" description="pith: document the selected declarations" showInMainMenu="true" showInEditor="true" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="false" showConsoleOnStdErr="true" synchronizeAfterRun="true">
+  <tool name="edit: add doc comment" description="pith: document the selection" showInMainMenu="true" showInEditor="true" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="false" showConsoleOnStdErr="true" synchronizeAfterRun="true">
     <exec>
-      <option name="COMMAND" value="C:\Users\Nicholas\GolandProjects\pith\pith.exe" />
-      <option name="PARAMETERS" value="edit &quot;$FilePath$&quot; --range $SelectionStartLine$:$SelectionEndLine$ --prompt &quot;add a concise Go doc comment to each declaration in the selection; change nothing else&quot; --agent &quot;claude --dangerously-skip-permissions -p&quot;" />
+      <option name="COMMAND" value="C:\tools\pith\pith.exe" />
+      <option name="PARAMETERS" value="edit &quot;$FilePath$&quot; --range $SelectionStartLine$:$SelectionEndLine$ --prompt &quot;add a concise XML doc comment to each member in the selection; change nothing else&quot; --agent &quot;claude --dangerously-skip-permissions -p&quot;" />
       <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
     </exec>
   </tool>
