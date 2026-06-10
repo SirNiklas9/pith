@@ -1,5 +1,7 @@
 package pith.plugin
 
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.util.ExecUtil
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.Messages
@@ -8,6 +10,7 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
+import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -27,6 +30,32 @@ class PithConfigurable : Configurable {
     private val modelField  = JBTextField()
     private val keyField    = JBPasswordField()
     private val previewBox  = JBCheckBox("Preview context && cost before sending AI edits")
+    private val priceButton = JButton("Fetch rates for this model")
+
+    init {
+        // Write-through like the key field: runs `pith price <model>` via the
+        // resolved binary, caching current rates so previews can show cost
+        // offline — no terminal, no hunting for the executable.
+        priceButton.addActionListener {
+            val model = modelField.text.trim()
+            if (model.isEmpty()) {
+                Messages.showWarningDialog("Set an API model first.", "pith")
+                return@addActionListener
+            }
+            try {
+                val cmd = GeneralCommandLine(PithBinary.resolve(), "price", model)
+                    .withCharset(Charsets.UTF_8)
+                val out = ExecUtil.execAndGetOutput(cmd, 30_000)
+                if (out.exitCode == 0) {
+                    Messages.showInfoMessage(out.stdout.trim(), "pith — rates cached")
+                } else {
+                    Messages.showErrorDialog((out.stderr + out.stdout).trim(), "pith")
+                }
+            } catch (ex: Exception) {
+                Messages.showErrorDialog("Couldn't run pith: ${ex.message}", "pith")
+            }
+        }
+    }
 
     override fun getDisplayName() = "pith"
 
@@ -37,6 +66,7 @@ class PithConfigurable : Configurable {
         .addLabeledComponent(JBLabel("Agent command:"), agentField)
         .addLabeledComponent(JBLabel("API (preset or URL):"), apiField)
         .addLabeledComponent(JBLabel("API model:"), modelField)
+        .addComponentToRightColumn(priceButton)
         .addLabeledComponent(JBLabel("API key:"), keyField)
         .addComponentToRightColumn(JBLabel("Saved to pith's own config store on Apply — never kept in the IDE."))
         .addComponent(previewBox)

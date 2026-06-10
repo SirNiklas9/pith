@@ -299,6 +299,16 @@ async function cmdSetApiKey() {
   vscode.window.showInformationMessage(`pith: ${env} saved to pith config`);
 }
 
+// Fetch + cache current rates for a model so previews show cost offline.
+async function cmdFetchRates() {
+  const configured = vscode.workspace.getConfiguration("pith").get("apiModel", "");
+  const model = await vscode.window.showInputBox({ prompt: "pith: model to fetch rates for", value: configured });
+  if (!model) return;
+  const res = await runPith(["price", model.trim()]);
+  if (res.code !== 0) return fail(res, "price");
+  vscode.window.showInformationMessage("pith: " + res.stdout.trim().replace(/\s*\n\s*/g, "  "));
+}
+
 async function cmdWorkAdd() {
   const note = await vscode.window.showInputBox({ prompt: "pith work add" });
   if (!note) return;
@@ -328,6 +338,7 @@ function activate(context) {
     "pith.workList": cmdWorkList,
     "pith.workAdd": cmdWorkAdd,
     "pith.setApiKey": cmdSetApiKey,
+    "pith.fetchRates": cmdFetchRates,
   };
   for (const [id, fn] of Object.entries(commands)) {
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));

@@ -21,7 +21,8 @@
       { "command": "pith.generate",    "title": "pith: Generate File…" },
       { "command": "pith.workList",    "title": "pith: Work List" },
       { "command": "pith.workAdd",     "title": "pith: Work Add at Cursor" },
-      { "command": "pith.setApiKey",   "title": "pith: Set API Key…" }
+      { "command": "pith.setApiKey",   "title": "pith: Set API Key…" },
+      { "command": "pith.fetchRates",  "title": "pith: Fetch Rates…" }
     ],
     "keybindings": [
       { "command": "pith.read",       "key": "ctrl+alt+o",       "when": "editorTextFocus" },
