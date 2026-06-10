@@ -102,7 +102,7 @@ func main() {
 		"  pith explain  <file> <name> --cmd \"<llm>\"            deep explanation of one declaration\n" +
 		"  pith explain  <file:line>  --cmd \"<llm>\"\n" +
 		"  pith summary  <file|dir> --cmd \"<llm>\"\n" +
-		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project|uses[:dir|:project][:N][:full]]\n" +
+		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project|uses[:dir|:project][:N|:all][:full|:fullN]]\n" +
 		"  pith generate <newfile> --prompt \"...\" --cmd \"<llm>\" [--apply] [--context file|dir|project]\n" +
 		"  pith work     [add \"<note>\" [--at file:line] | done <id> | rm <id> | clear | --all]\n" +
 		"  pith config   [set <name> <value> | unset <name> | path]   set-and-forget backend + API keys"

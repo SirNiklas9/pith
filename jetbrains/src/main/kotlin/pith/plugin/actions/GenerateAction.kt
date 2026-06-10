@@ -16,7 +16,7 @@ class GenerateAction : PithAction("Generate File...", "Generate a new file from 
 
         val dialog = PithPromptDialog(
             project, "pith generate", "What to generate:",
-            PithPromptDialog.GENERATE_CONTEXTS,
+            relational = false,
             pathLabel = "New file path (relative to project root):"
         )
         if (!dialog.showAndGet()) return

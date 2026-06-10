@@ -38,25 +38,18 @@ func BuildContextRegion(file, level string, a, b int) (string, error) {
 	if !strings.HasPrefix(level, "uses") {
 		return BuildContext(file, level)
 	}
-	decls, full, err := UsesClosure(file, level, a, b)
+	decls, fullDepth, err := UsesClosure(file, level, a, b)
 	if err != nil || len(decls) == 0 {
 		return "", err
 	}
 
-	if !full {
-		entries := make([]Entry, len(decls))
-		for i, d := range decls {
-			entries[i] = d.Entry
-		}
-		return digestEntries(entries), nil
-	}
-
-	// Full mode: real source until the byte budget runs out, then outlines —
-	// degrading beats silently dropping or silently flooding.
+	// Detail falloff: hops within fullDepth get real source (until the byte
+	// budget runs out), everything farther gets an outline line — degrading
+	// beats silently dropping or silently flooding.
 	var sb strings.Builder
 	budget := usesMaxSourceBytes
 	for _, d := range decls {
-		if budget >= len(d.Source) {
+		if d.Hop <= fullDepth && budget >= len(d.Source) {
 			fmt.Fprintf(&sb, "// %s:%d\n%s\n\n", d.File, d.Line, d.Source)
 			budget -= len(d.Source)
 		} else {
@@ -75,23 +68,24 @@ type UsedDecl struct {
 
 // UsesClosure resolves a uses level to its declarations without rendering —
 // the shared engine behind [BuildContextRegion] and the dry-run report.
-func UsesClosure(file, level string, a, b int) (decls []UsedDecl, full bool, err error) {
-	scope, depth, full, err := parseUsesLevel(level)
+// fullDepth is the detail falloff boundary: hops ≤ fullDepth render as source.
+func UsesClosure(file, level string, a, b int) (decls []UsedDecl, fullDepth int, err error) {
+	scope, depth, fullDepth, err := parseUsesLevel(level)
 	if err != nil {
-		return nil, false, err
+		return nil, 0, err
 	}
 
 	idents, err := identifiersInRegion(file, a, b)
 	if err != nil {
-		return nil, full, err
+		return nil, fullDepth, err
 	}
 	if len(idents) == 0 {
-		return nil, full, nil
+		return nil, fullDepth, nil
 	}
 
 	pool, err := usesPool(file, scope)
 	if err != nil {
-		return nil, full, err
+		return nil, fullDepth, err
 	}
 
 	target := filepath.Clean(file)
@@ -152,7 +146,7 @@ func UsesClosure(file, level string, a, b int) (decls []UsedDecl, full bool, err
 	if len(decls) > usesMaxDecls {
 		decls = decls[:usesMaxDecls]
 	}
-	return decls, full, nil
+	return decls, fullDepth, nil
 }
 
 // EstimateTokens converts a byte count to an approximate LLM token count using
@@ -170,26 +164,34 @@ func EstimateTokensRange(bytes int) (low, high int) {
 	return bytes * 2 / 9, (bytes + 2) / 3
 }
 
-// parseUsesLevel splits a uses level into scope, hop depth, and the :full flag.
-func parseUsesLevel(level string) (scope string, depth int, full bool, err error) {
+// parseUsesLevel splits a uses level into scope, hop depth, and full depth.
+// Depth: 1-9 or "all" (exhaust the chain — the scope is finite, so it
+// terminates). fullDepth is the detail falloff: hops ≤ fullDepth send real
+// source, farther hops send outlines — relevance decays with distance, so
+// detail does too. ":full" = full everywhere, ":fullN" = full to hop N.
+func parseUsesLevel(level string) (scope string, depth, fullDepth int, err error) {
 	parts := strings.Split(level, ":")
 	if parts[0] != "uses" {
-		return "", 0, false, fmt.Errorf("unknown --context %q", level)
+		return "", 0, 0, fmt.Errorf("unknown --context %q", level)
 	}
-	scope, depth = "file", 1
+	scope, depth, fullDepth = "file", 1, 0
 	for _, p := range parts[1:] {
 		switch {
 		case p == "dir" || p == "project":
 			scope = p
+		case p == "all":
+			depth = usesMaxDecls // closure is capped there anyway
 		case p == "full":
-			full = true
+			fullDepth = usesMaxDecls
+		case strings.HasPrefix(p, "full") && len(p) == 5 && p[4] >= '1' && p[4] <= '9':
+			fullDepth = int(p[4] - '0')
 		case len(p) == 1 && p[0] >= '1' && p[0] <= '9':
 			depth = int(p[0] - '0')
 		default:
-			return "", 0, false, fmt.Errorf("unknown --context %q (want uses[:dir|:project][:N][:full])", level)
+			return "", 0, 0, fmt.Errorf("unknown --context %q (want uses[:dir|:project][:N|:all][:full|:fullN])", level)
 		}
 	}
-	return scope, depth, full, nil
+	return scope, depth, fullDepth, nil
 }
 
 // usesPool gathers the declarations a uses level may resolve against.

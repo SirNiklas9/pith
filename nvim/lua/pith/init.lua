@@ -344,7 +344,7 @@ function M.edit()
   if s < 1 then vim.notify("pith: make a visual selection first", vim.log.levels.WARN); return end
   vim.ui.input({ prompt = "pith edit: " }, function(instruction)
     if not instruction or instruction == "" then return end
-    with_context({ "uses:dir", "uses:dir:full", "uses:dir:3:full", "around", "file", "dir", "project" }, function(ctx_args)
+    with_context({ "uses:dir:all:full1", "uses:dir:all", "uses:dir:all:full", "around", "file", "dir", "project" }, function(ctx_args)
       vim.notify("pith: editing…", vim.log.levels.INFO)
       if config.agent and vim.bo.modified then
         vim.cmd("silent noautocmd write")

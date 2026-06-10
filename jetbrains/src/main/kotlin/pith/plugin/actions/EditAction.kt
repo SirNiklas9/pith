@@ -34,7 +34,7 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
 
         val dialog = PithPromptDialog(
             project, "pith edit", "Instruction (lines $start–$end):",
-            PithPromptDialog.EDIT_CONTEXTS
+            relational = true
         )
         if (!dialog.showAndGet()) return
         val prompt = dialog.prompt

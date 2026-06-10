@@ -65,9 +65,9 @@ async function contextArgs(levels) {
 
 const EDIT_CONTEXTS = [
   ["none", "just the selection"],
-  ["uses:dir", "what the selection references — outlines (this folder)"],
-  ["uses:dir:full", "what the selection references — full implementations"],
-  ["uses:dir:3:full", "follow the chain 3 hops — implementations of what those use too"],
+  ["uses:dir:all:full1", "the reference chain (this folder) — full nearby, outlines deeper"],
+  ["uses:dir:all", "the reference chain (this folder) — outlines only"],
+  ["uses:dir:all:full", "the reference chain (this folder) — full everywhere"],
   ["around", "this file's outline"],
   ["file", "this file's full source"],
   ["dir", "the folder's outline"],

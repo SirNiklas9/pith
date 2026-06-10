@@ -75,13 +75,13 @@
         },
         "pith.context": {
           "type": "string",
-          "enum": ["none", "ask", "uses:dir", "uses:dir:full", "uses:dir:3:full", "around", "file", "dir", "project"],
+          "enum": ["none", "ask", "uses:dir:all:full1", "uses:dir:all", "uses:dir:all:full", "around", "file", "dir", "project"],
           "enumDescriptions": [
             "No context — the AI sees only the selection/prompt (pith's default).",
             "Pick the context level each time edit/generate runs.",
-            "Outlines of the declarations the selection references (this folder). Edit only.",
-            "Full implementations of the declarations the selection references. Edit only.",
-            "Follow the reference chain 3 hops — implementations of what those use too. Edit only.",
+            "The reference chain (this folder) — full nearby, outlines deeper. Edit only.",
+            "The reference chain (this folder) — outlines only. Edit only.",
+            "The reference chain (this folder) — full everywhere. Edit only.",
             "This file's outline.",
             "This file's full source.",
             "The folder's outline.",
