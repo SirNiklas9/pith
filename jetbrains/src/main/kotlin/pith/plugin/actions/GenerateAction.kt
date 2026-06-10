@@ -11,7 +11,7 @@ class GenerateAction : PithAction("Generate File...", "Generate a new file from 
     override fun actionPerformed(e: AnActionEvent) {
         val project  = e.project ?: return
         val basePath = project.basePath ?: return
-        val agent    = PithSettings.getInstance().state.agentCommand
+        val backend  = PithSettings.getInstance().backendArgs()
 
         val relPath = Messages.showInputDialog(
             project, "New file path (relative to project root):", "pith generate", null
@@ -23,7 +23,7 @@ class GenerateAction : PithAction("Generate File...", "Generate a new file from 
 
         val fullPath = "$basePath/$relPath"
 
-        runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--agent", agent, "--apply")) {
+        runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--apply") + backend) {
             // Refresh VFS then open the new file — the Runnable fires after refresh completes
             VirtualFileManager.getInstance().asyncRefresh {
                 val newFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(fullPath)

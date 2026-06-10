@@ -3,6 +3,7 @@ package pith.plugin.actions
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.command.CommandProcessor
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.application.ApplicationManager
@@ -20,7 +21,7 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
         val vFile   = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         val editor  = e.getData(CommonDataKeys.EDITOR) ?: return
         val file    = vFile.path
-        val agent   = PithSettings.getInstance().state.agentCommand
+        val backend = PithSettings.getInstance().backendArgs()
 
         val doc   = FileDocumentManager.getInstance().getDocument(vFile) ?: return
         val sel   = editor.selectionModel
@@ -33,7 +34,12 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
 
         FileDocumentManager.getInstance().saveDocument(doc)
 
-        val args    = listOf("edit", file, "--range", "$start:$end", "--prompt", prompt, "--agent", agent, "--apply")
+        // --raw, not --apply: a completion backend prints the new region to
+        // stdout and never touches the file, so the plugin can splice it into
+        // the document itself — disk changes only through IntelliJ, which makes
+        // a File Cache Conflict impossible. An agent backend ignores --raw and
+        // writes the file directly; the mtime watcher below catches that case.
+        val args    = listOf("edit", file, "--range", "$start:$end", "--prompt", prompt, "--raw") + backend
         val workDir = project.basePath ?: return
 
         ToolWindowManager.getInstance(project).getToolWindow("pith")?.show()
@@ -47,45 +53,75 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
             PithToolWindowFactory.print(project, "[pith] error: can't stat $file: ${ex.message}\n", true)
             return
         }
-        val done = AtomicBoolean(false)
+        val done    = AtomicBoolean(false)
+        val applied = AtomicBoolean(false)
+        val rawBuf  = StringBuilder()
 
-        // Poll the file's mtime every 50ms on a background thread. The agent writes
-        // the file mid-run; we detect the write and inject the new content into the
-        // document inside a command so undo/redo work. (Watching mtime beats waiting
-        // for the process: on Windows the agent's child processes inherit pith's
-        // stdout handle and keep the pipe open past the edit.)
+        // AGENT path: the agent wrote the file on disk — inject its content into
+        // the document (inside a command so undo works) and save immediately so
+        // memory and disk agree before the IDE's file watcher looks.
+        fun applyFromDisk(): Boolean {
+            val mtime = try {
+                Files.getLastModifiedTime(filePath).toMillis()
+            } catch (ex: Exception) { return false }
+            if (mtime == initialMtime) return false
+            if (!applied.compareAndSet(false, true)) return true
+            try {
+                Thread.sleep(80) // let the write flush
+                val newContent = Files.readString(filePath).replace("\r\n", "\n").replace("\r", "\n")
+                ApplicationManager.getApplication().invokeLater {
+                    ApplicationManager.getApplication().runWriteAction {
+                        CommandProcessor.getInstance().executeCommand(project, {
+                            if (doc.text != newContent) doc.setText(newContent)
+                        }, "pith edit", null)
+                        FileDocumentManager.getInstance().saveDocument(doc)
+                    }
+                    PithToolWindowFactory.print(project, "\n[pith] applied — Ctrl+Z to undo\n")
+                }
+            } catch (ex: Exception) {
+                PithToolWindowFactory.print(project, "\n[pith] reload failed: ${ex.message}\n", true)
+            }
+            return true
+        }
+
         Thread {
             var elapsed = 0
-            while (!done.get() && elapsed < 120_000) {
+            while (elapsed < 120_000) {
+                if (applyFromDisk()) break
+                if (done.get()) { applyFromDisk(); break }
                 Thread.sleep(50)
                 elapsed += 50
-                val mtime = try {
-                    Files.getLastModifiedTime(filePath).toMillis()
-                } catch (ex: Exception) { break }
-                if (mtime != initialMtime && done.compareAndSet(false, true)) {
-                    try {
-                        Thread.sleep(80) // let the write flush
-                        val newContent = Files.readString(filePath).replace("\r\n", "\n").replace("\r", "\n")
-                        ApplicationManager.getApplication().invokeLater {
-                            ApplicationManager.getApplication().runWriteAction {
-                                CommandProcessor.getInstance().executeCommand(project, {
-                                    doc.setText(newContent)
-                                }, "pith edit", null)
-                            }
-                            PithToolWindowFactory.print(project, "\n[pith] applied — Ctrl+Z to undo\n")
-                        }
-                    } catch (ex: Exception) {
-                        PithToolWindowFactory.print(project, "\n[pith] reload failed: ${ex.message}\n", true)
-                    }
-                }
             }
         }.also { it.isDaemon = true; it.start() }
 
         PithRunner.run(
             args     = args,
             workDir  = workDir,
-            onOutput = { text -> PithToolWindowFactory.print(project, text) },
-            onDone   = { done.set(true) }
+            onOutput = { text, isStdout ->
+                PithToolWindowFactory.print(project, text)
+                if (isStdout) rawBuf.append(text) // only real stdout can be the region
+            },
+            onDone   = {
+                done.set(true)
+                // COMPLETION path: file untouched, the new region is on stdout —
+                // replace the selected lines in the editor. Native undo, no disk
+                // interplay, instant.
+                val mtimeNow = try {
+                    Files.getLastModifiedTime(filePath).toMillis()
+                } catch (ex: Exception) { initialMtime }
+                if (mtimeNow == initialMtime && rawBuf.isNotBlank() && applied.compareAndSet(false, true)) {
+                    val newRegion = rawBuf.toString().replace("\r\n", "\n").trimEnd('\n')
+                    val startOff  = doc.getLineStartOffset((start - 1).coerceIn(0, doc.lineCount - 1))
+                    val endOff    = doc.getLineEndOffset((end - 1).coerceIn(0, doc.lineCount - 1))
+                    WriteCommandAction.runWriteCommandAction(project) {
+                        doc.replaceString(startOff, endOff, newRegion)
+                    }
+                    ApplicationManager.getApplication().runWriteAction {
+                        FileDocumentManager.getInstance().saveDocument(doc)
+                    }
+                    PithToolWindowFactory.print(project, "\n[pith] applied — Ctrl+Z to undo\n")
+                }
+            }
         )
     }
 }

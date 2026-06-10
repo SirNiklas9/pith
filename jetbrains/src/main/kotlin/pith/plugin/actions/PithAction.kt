@@ -26,7 +26,7 @@ abstract class PithAction(text: String, description: String) : AnAction(text, de
         PithRunner.run(
             args     = args,
             workDir  = workDir,
-            onOutput = { text -> PithToolWindowFactory.print(project, text) },
+            onOutput = { text, _ -> PithToolWindowFactory.print(project, text) },
             onDone   = onDone
         )
     }

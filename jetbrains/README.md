@@ -6,16 +6,20 @@ pith core doesn't change. The plugin is just a UI shell that calls the binary.
 
 ---
 
-## Build
+## Install
+
+**Prebuilt**: download `pith-jetbrains-<version>.zip` from **[Releases](https://github.com/SirNiklas9/pith/releases)** and install via **Settings ▸ Plugins ▸ ⚙ ▸ Install Plugin from Disk**. Works in any JetBrains IDE on 2024.1+ — Rider, GoLand, IntelliJ, PyCharm, all of them.
+
+## Build from source
 
 You need JDK 17+ and Gradle.
 
 ```
 cd jetbrains
-./gradlew buildPlugin
+./gradlew clean buildPlugin
 ```
 
-The `.zip` lands in `build/distributions/`. Install via **Settings ▸ Plugins ▸ ⚙ ▸ Install Plugin from Disk**.
+The `.zip` lands in `build/distributions/`. Always `clean` — incremental builds can package stale class files.
 
 Or run in a sandboxed IDE for development:
 

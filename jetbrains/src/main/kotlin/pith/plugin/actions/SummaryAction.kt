@@ -6,8 +6,8 @@ import pith.plugin.PithSettings
 
 class SummaryAction : PithAction("Summary", "AI summary of the current file") {
     override fun actionPerformed(e: AnActionEvent) {
-        val file  = e.getData(CommonDataKeys.VIRTUAL_FILE)?.path ?: return
-        val agent = PithSettings.getInstance().state.agentCommand
-        runPith(e, listOf("summary", file, "--agent", agent))
+        val file    = e.getData(CommonDataKeys.VIRTUAL_FILE)?.path ?: return
+        val backend = PithSettings.getInstance().backendArgs()
+        runPith(e, listOf("summary", file) + backend)
     }
 }

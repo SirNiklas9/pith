@@ -50,7 +50,12 @@ func (b Backend) Run(prompt string) (string, error) {
 		base, keyEnv := resolveAPI(b.API)
 		key := ""
 		if keyEnv != "" {
-			key = os.Getenv(keyEnv)
+			key = os.Getenv(keyEnv) // env var wins
+			if key == "" {          // stored key is the set-and-forget fallback
+				if cfg, err := LoadConfig(); err == nil {
+					key = cfg.Key(keyEnv)
+				}
+			}
 		}
 		return runAPI(base, b.Model, key, prompt)
 	}

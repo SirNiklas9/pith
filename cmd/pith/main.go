@@ -99,13 +99,31 @@ func main() {
 		"  pith summary  <file|dir> --cmd \"<llm>\"\n" +
 		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project]\n" +
 		"  pith generate <newfile> --prompt \"...\" --cmd \"<llm>\" [--apply] [--context file|dir|project]\n" +
-		"  pith work     [add \"<note>\" [--at file:line] | done <id> | rm <id> | clear | --all]"
+		"  pith work     [add \"<note>\" [--at file:line] | done <id> | rm <id> | clear | --all]\n" +
+		"  pith config   [set <name> <value> | unset <name> | path]   set-and-forget backend + API keys"
 	if len(pos) == 0 {
 		die(usage)
 	}
 	if pos[0] == "work" {
 		workCmd(pos[1:], atArg, allFlag, jsonOut)
 		return
+	}
+	if pos[0] == "config" {
+		configCmd(pos[1:])
+		return
+	}
+	// Set-and-forget defaults: AI ops with no backend flags fall back to the
+	// stored config. Search is deliberately excluded — it is deterministic by
+	// default and goes AI only on EXPLICIT flags, so a stored default can never
+	// silently turn a free op into a billed one.
+	switch pos[0] {
+	case "explain", "summary", "edit", "generate", "gen":
+		if backend.None() {
+			if cfg, err := pith.LoadConfig(); err == nil {
+				backend.API, backend.Model = cfg.API, cfg.Model
+				backend.Agent, backend.Cmd = cfg.Agent, cfg.Cmd
+			}
+		}
 	}
 	if len(pos) < 2 {
 		die(usage)
@@ -375,6 +393,56 @@ func workCmd(args []string, at string, all, jsonOut bool) {
 		fmt.Fprintf(os.Stderr, "pith: cleared %d done item(s)\n", n)
 	default:
 		die("pith work: unknown subcommand", sub)
+	}
+}
+
+// configCmd is the set-and-forget store: default backend + API keys, handed to
+// pith once and saved in the user-config dir (no env vars, no registry, no
+// per-shell exports). `pith config` shows it (keys masked), set/unset edit it,
+// path prints where it lives.
+func configCmd(args []string) {
+	cfg, err := pith.LoadConfig()
+	if err != nil {
+		die("pith:", err)
+	}
+	sub, rest := "show", []string(nil)
+	if len(args) > 0 {
+		sub, rest = args[0], args[1:]
+	}
+	switch sub {
+	case "show", "list", "ls":
+		var b strings.Builder
+		cfg.Render(&b)
+		fmt.Print(b.String())
+	case "set":
+		if len(rest) < 2 {
+			die("pith config set needs <name> <value>, e.g.\n" +
+				"  pith config set api openrouter\n" +
+				"  pith config set model openai/gpt-4o-mini\n" +
+				"  pith config set OPENROUTER_API_KEY sk-or-...")
+		}
+		cfg.Set(rest[0], strings.Join(rest[1:], " "))
+		if err := cfg.Save(); err != nil {
+			die("pith:", err)
+		}
+		fmt.Fprintf(os.Stderr, "pith: %s set\n", rest[0])
+	case "unset":
+		if len(rest) < 1 {
+			die("pith config unset needs <name>")
+		}
+		cfg.Unset(rest[0])
+		if err := cfg.Save(); err != nil {
+			die("pith:", err)
+		}
+		fmt.Fprintf(os.Stderr, "pith: %s unset\n", rest[0])
+	case "path":
+		p, err := pith.ConfigPath()
+		if err != nil {
+			die("pith:", err)
+		}
+		fmt.Println(p)
+	default:
+		die("pith config: unknown subcommand", sub)
 	}
 }
 

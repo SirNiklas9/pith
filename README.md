@@ -8,6 +8,14 @@ That's the core. The rest of pith (AI edits, search, work notes) builds on top o
 
 ## Install
 
+### Prebuilt (no Go needed)
+
+Grab the latest binary for your platform from **[Releases](https://github.com/SirNiklas9/pith/releases)** — Windows, Linux, macOS (Intel and Apple Silicon). Rename it `pith` (or `pith.exe`), put it on your PATH.
+
+The JetBrains plugin zip is on the same page — install it via **Settings ▸ Plugins ▸ ⚙ ▸ Install Plugin from Disk** in any JetBrains IDE (Rider, GoLand, IntelliJ, PyCharm, 2024.1+).
+
+### From source
+
 You need [Go](https://go.dev/dl/) installed (1.22 or later). Then:
 
 ```
