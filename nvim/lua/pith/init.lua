@@ -412,6 +412,21 @@ function M.map()
   end)
 end
 
+-- set_key: hand an API key to pith's own config store (same store every
+-- editor and binary reads). Nothing is kept in nvim config.
+-- The env-var name comes from the api preset: openrouter/openai/custom.
+function M.set_key(api)
+  api = api or "openrouter"
+  local env = ({ openai = "OPENAI_API_KEY", openrouter = "OPENROUTER_API_KEY" })[api] or "PITH_API_KEY"
+  vim.ui.input({ prompt = "pith — " .. env .. ": " }, function(key)
+    if not key or key == "" then return end
+    run_async({ "config", "set", env, vim.trim(key) }, function(_, err)
+      if err then vim.notify("pith: " .. err, vim.log.levels.ERROR); return end
+      vim.notify("pith: " .. env .. " saved to pith config")
+    end)
+  end)
+end
+
 -- work_list: show the project work-tracker in a float.
 function M.work_list()
   local lines, err = run_sync({ "work" })

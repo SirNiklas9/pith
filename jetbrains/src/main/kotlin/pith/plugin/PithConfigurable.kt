@@ -2,7 +2,9 @@ package pith.plugin
 
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.ComboBox
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import javax.swing.JComponent
@@ -22,6 +24,7 @@ class PithConfigurable : Configurable {
     private val agentField  = JBTextField()
     private val apiField    = JBTextField()
     private val modelField  = JBTextField()
+    private val keyField    = JBPasswordField()
 
     override fun getDisplayName() = "pith"
 
@@ -32,10 +35,20 @@ class PithConfigurable : Configurable {
         .addLabeledComponent(JBLabel("Agent command:"), agentField)
         .addLabeledComponent(JBLabel("API (preset or URL):"), apiField)
         .addLabeledComponent(JBLabel("API model:"), modelField)
+        .addLabeledComponent(JBLabel("API key:"), keyField)
+        .addComponentToRightColumn(JBLabel("Saved to pith's own config store on Apply — never kept in the IDE."))
         .addComponentFillVertically(JPanel(), 0)
         .panel
 
     private fun selectedMode(): String = modes[modeBox.selectedItem as String] ?: "agent"
+
+    /** The env-var name pith reads the key from, per the API preset. */
+    private fun keyEnvFor(apiTarget: String): String? = when (apiTarget) {
+        "openai"     -> "OPENAI_API_KEY"
+        "openrouter" -> "OPENROUTER_API_KEY"
+        "ollama"     -> null // local, no key
+        else         -> "PITH_API_KEY"
+    }
 
     override fun isModified(): Boolean {
         val s = PithSettings.getInstance().state
@@ -43,7 +56,8 @@ class PithConfigurable : Configurable {
                agentField.text  != s.agentCommand ||
                selectedMode()   != s.backendMode ||
                apiField.text    != s.apiTarget ||
-               modelField.text  != s.apiModel
+               modelField.text  != s.apiModel ||
+               keyField.password.isNotEmpty()
     }
 
     override fun apply() {
@@ -53,6 +67,29 @@ class PithConfigurable : Configurable {
         s.backendMode  = selectedMode()
         s.apiTarget    = apiField.text.trim()
         s.apiModel     = modelField.text.trim()
+
+        // The key is write-through: handed once to `pith config set`, which owns
+        // it from then on (file-permission-protected, masked, shared by every
+        // editor). The IDE keeps nothing — the field clears after Apply.
+        val key = String(keyField.password).trim()
+        if (key.isNotEmpty()) {
+            val env = keyEnvFor(s.apiTarget)
+            if (env == null) {
+                Messages.showInfoMessage("The '${s.apiTarget}' preset is local — it doesn't use an API key.", "pith")
+            } else {
+                try {
+                    val p = ProcessBuilder(PithBinary.resolve(), "config", "set", env, key)
+                        .redirectErrorStream(true).start()
+                    val out = p.inputStream.bufferedReader().readText()
+                    if (p.waitFor() != 0) {
+                        Messages.showErrorDialog("pith config set failed:\n$out", "pith")
+                    }
+                } catch (ex: Exception) {
+                    Messages.showErrorDialog("Couldn't run pith: ${ex.message}", "pith")
+                }
+            }
+            keyField.setText("")
+        }
     }
 
     override fun reset() {
@@ -63,5 +100,6 @@ class PithConfigurable : Configurable {
             ?: modes.keys.first()
         apiField.text   = s.apiTarget
         modelField.text = s.apiModel
+        keyField.setText("")
     }
 }

@@ -20,7 +20,8 @@
       { "command": "pith.edit",        "title": "pith: Edit Selection…" },
       { "command": "pith.generate",    "title": "pith: Generate File…" },
       { "command": "pith.workList",    "title": "pith: Work List" },
-      { "command": "pith.workAdd",     "title": "pith: Work Add at Cursor" }
+      { "command": "pith.workAdd",     "title": "pith: Work Add at Cursor" },
+      { "command": "pith.setApiKey",   "title": "pith: Set API Key…" }
     ],
     "keybindings": [
       { "command": "pith.read",       "key": "ctrl+alt+o",       "when": "editorTextFocus" },

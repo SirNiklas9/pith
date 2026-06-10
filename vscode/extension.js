@@ -265,6 +265,21 @@ async function cmdWorkList() {
   await pickAndJump(res.stdout.split("\n"), "work");
 }
 
+// Write-through key entry: handed once to `pith config set` (pith's own
+// store — file-protected, masked, shared by every editor); VS Code keeps nothing.
+async function cmdSetApiKey() {
+  const target = vscode.workspace.getConfiguration("pith").get("apiTarget", "openrouter");
+  const env = target === "openai" ? "OPENAI_API_KEY"
+    : target === "openrouter" ? "OPENROUTER_API_KEY"
+    : target === "ollama" ? null : "PITH_API_KEY";
+  if (!env) { vscode.window.showInformationMessage(`pith: '${target}' is local — no API key needed`); return; }
+  const key = await vscode.window.showInputBox({ prompt: `pith: API key for ${target} (saved to pith config, not VS Code)`, password: true });
+  if (!key) return;
+  const res = await runPith(["config", "set", env, key.trim()]);
+  if (res.code !== 0) return fail(res, "config set");
+  vscode.window.showInformationMessage(`pith: ${env} saved to pith config`);
+}
+
 async function cmdWorkAdd() {
   const note = await vscode.window.showInputBox({ prompt: "pith work add" });
   if (!note) return;
@@ -293,6 +308,7 @@ function activate(context) {
     "pith.generate": cmdGenerate,
     "pith.workList": cmdWorkList,
     "pith.workAdd": cmdWorkAdd,
+    "pith.setApiKey": cmdSetApiKey,
   };
   for (const [id, fn] of Object.entries(commands)) {
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
