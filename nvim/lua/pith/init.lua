@@ -13,6 +13,7 @@
 --       })
 --       local p = require("pith")
 --       vim.keymap.set("n",          "<leader>po", p.overview,   { desc = "pith: overview" })
+--       vim.keymap.set("n",          "<leader>pm", p.map,        { desc = "pith: map project" })
 --       vim.keymap.set("n",          "<leader>ps", p.summary,    { desc = "pith: summary" })
 --       vim.keymap.set("n",          "<leader>pf", p.search,     { desc = "pith: search" })
 --       vim.keymap.set("v",          "<leader>pe", p.edit,       { desc = "pith: edit selection" })
@@ -32,6 +33,8 @@ local config = {
   bin          = nil,   -- explicit binary path; nil = resolve automatically
   backend_args = {},    -- { "--agent", "claude --dangerously-skip-permissions -p" }
   agent        = false, -- true when backend edits files itself (edit reloads buffer)
+  context      = nil,   -- nil = none, "ask" = pick per edit/generate, or a fixed
+                        -- level: "around"|"file"|"dir"|"project"
   width        = 0.7,
   height       = 0.7,
   border       = "rounded",
@@ -245,6 +248,19 @@ local function open_float(lines, src_file, wrap_text)
   vim.keymap.set("n", "<CR>",  jump,  kopts)
 end
 
+-- Resolves the --context args for an AI op per config.context, then calls
+-- cb(ctx_args). "ask" shows a picker over levels; nil/none passes {}.
+local function with_context(levels, cb)
+  local c = config.context
+  if not c or c == "none" then return cb({}) end
+  if c ~= "ask" then return cb({ "--context", c }) end
+  local items = vim.list_extend({ "none" }, levels)
+  vim.ui.select(items, { prompt = "pith context:" }, function(choice)
+    if not choice then return end -- dismissed = abort the op
+    cb(choice == "none" and {} or { "--context", choice })
+  end)
+end
+
 -- ─── ops ────────────────────────────────────────────────────────────────────
 
 -- overview: purpose-map of the current file (deterministic, no AI).
@@ -325,34 +341,37 @@ function M.edit()
   if s < 1 then vim.notify("pith: make a visual selection first", vim.log.levels.WARN); return end
   vim.ui.input({ prompt = "pith edit: " }, function(instruction)
     if not instruction or instruction == "" then return end
-    vim.notify("pith: editing…", vim.log.levels.INFO)
-    if config.agent and vim.bo.modified then
-      vim.cmd("silent noautocmd write")
-    end
-    local args = { "edit", file, "--range", s .. ":" .. e, "--prompt", instruction }
-    if not config.agent then
-      table.insert(args, "--raw")
-    end
-    vim.list_extend(args, config.backend_args)
-    run_async(args, function(out, err)
-      if not out then
-        vim.notify("pith: " .. (err or "failed"), vim.log.levels.ERROR)
-        return
+    with_context({ "around", "file", "dir", "project" }, function(ctx_args)
+      vim.notify("pith: editing…", vim.log.levels.INFO)
+      if config.agent and vim.bo.modified then
+        vim.cmd("silent noautocmd write")
       end
-      if config.agent then
-        local ok, content = pcall(vim.fn.readfile, file)
-        if ok then
-          vim.api.nvim_buf_set_lines(0, 0, -1, false, content)
-          vim.notify("pith: applied (u to undo)", vim.log.levels.INFO)
-        else
-          vim.cmd("checktime")
-          vim.notify("pith: agent edited the file (:e! to reload)", vim.log.levels.WARN)
+      local args = { "edit", file, "--range", s .. ":" .. e, "--prompt", instruction }
+      if not config.agent then
+        table.insert(args, "--raw")
+      end
+      vim.list_extend(args, ctx_args)
+      vim.list_extend(args, config.backend_args)
+      run_async(args, function(out, err)
+        if not out then
+          vim.notify("pith: " .. (err or "failed"), vim.log.levels.ERROR)
+          return
         end
-      else
-        local t = vim.trim(out)
-        vim.api.nvim_buf_set_lines(0, s - 1, e, false, (t == "") and {} or vim.split(t, "\n"))
-        vim.notify("pith: applied (u to undo)", vim.log.levels.INFO)
-      end
+        if config.agent then
+          local ok, content = pcall(vim.fn.readfile, file)
+          if ok then
+            vim.api.nvim_buf_set_lines(0, 0, -1, false, content)
+            vim.notify("pith: applied (u to undo)", vim.log.levels.INFO)
+          else
+            vim.cmd("checktime")
+            vim.notify("pith: agent edited the file (:e! to reload)", vim.log.levels.WARN)
+          end
+        else
+          local t = vim.trim(out)
+          vim.api.nvim_buf_set_lines(0, s - 1, e, false, (t == "") and {} or vim.split(t, "\n"))
+          vim.notify("pith: applied (u to undo)", vim.log.levels.INFO)
+        end
+      end)
     end)
   end)
 end
@@ -364,15 +383,32 @@ function M.generate()
     if not path or path == "" then return end
     vim.ui.input({ prompt = "pith generate — what to generate: " }, function(prompt)
       if not prompt or prompt == "" then return end
-      vim.notify("pith: generating " .. path .. "…", vim.log.levels.INFO)
-      local args = { "generate", path, "--prompt", prompt, "--apply" }
-      vim.list_extend(args, config.backend_args)
-      run_async(args, function(_, err)
-        if err then vim.notify("pith: " .. err, vim.log.levels.ERROR); return end
-        vim.notify("pith: wrote " .. path, vim.log.levels.INFO)
-        pcall(vim.cmd, "edit " .. vim.fn.fnameescape(path))
+      with_context({ "dir", "project" }, function(ctx_args)
+        vim.notify("pith: generating " .. path .. "…", vim.log.levels.INFO)
+        local args = { "generate", path, "--prompt", prompt, "--apply" }
+        vim.list_extend(args, ctx_args)
+        vim.list_extend(args, config.backend_args)
+        run_async(args, function(_, err)
+          if err then vim.notify("pith: " .. err, vim.log.levels.ERROR); return end
+          vim.notify("pith: wrote " .. path, vim.log.levels.INFO)
+          pcall(vim.cmd, "edit " .. vim.fn.fnameescape(path))
+        end)
       end)
     end)
+  end)
+end
+
+-- map: whole-repo purpose map, one row per package. Purposes need a backend
+-- and are content-hash cached in .pith-map.json — re-runs are free until the
+-- code changes. Without a backend the map is deterministic structure only.
+function M.map()
+  local cwd  = vim.fn.getcwd()
+  local args = { "map", cwd }
+  vim.list_extend(args, config.backend_args)
+  vim.notify("pith: mapping…", vim.log.levels.INFO)
+  run_async(args, function(out, err)
+    if not out then vim.notify("pith: " .. err, vim.log.levels.ERROR); return end
+    open_float(vim.split(vim.trim(out), "\n"), nil, false)
   end)
 end
 

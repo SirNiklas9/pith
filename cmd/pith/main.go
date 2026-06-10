@@ -27,7 +27,7 @@ import (
 
 func main() {
 	args := os.Args[1:]
-	var jsonOut, grepOut, vsOut, apply, raw, recursive, allFlag bool
+	var jsonOut, grepOut, vsOut, apply, raw, recursive, allFlag, aiFlag bool
 	var backend pith.Backend
 	var rangeArg, promptArg, atArg, contextArg string
 	var pos []string
@@ -53,6 +53,8 @@ func main() {
 			raw = true
 		case a == "-r" || a == "--recursive":
 			recursive = true
+		case a == "--ai":
+			aiFlag = true
 		case a == "--all":
 			allFlag = true
 		case a == "--at":
@@ -93,6 +95,7 @@ func main() {
 	}
 	usage := "usage:\n" +
 		"  pith read     <file|dir> [name] [--grep|--json]\n" +
+		"  pith map      [dir] [--json]                          repo map, one row per package; --ai (stored backend) or --cmd/--api/--agent adds cached one-line purposes\n" +
 		"  pith search   <query> [dir] [-r] [--json]            deterministic; add --cmd/--api/--agent for AI\n" +
 		"  pith explain  <file> <name> --cmd \"<llm>\"            deep explanation of one declaration\n" +
 		"  pith explain  <file:line>  --cmd \"<llm>\"\n" +
@@ -110,6 +113,14 @@ func main() {
 	}
 	if pos[0] == "config" {
 		configCmd(pos[1:])
+		return
+	}
+	if pos[0] == "map" {
+		dir := "."
+		if len(pos) >= 2 {
+			dir = pos[1]
+		}
+		mapCmd(dir, backend, aiFlag, jsonOut)
 		return
 	}
 	// Set-and-forget defaults: AI ops with no backend flags fall back to the
@@ -333,6 +344,40 @@ func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool, ctx
 	default:
 		fmt.Printf("--- %s (proposed — rerun with --apply to write, --raw for just the code)\n", file)
 		fmt.Println(content)
+	}
+}
+
+// mapCmd renders the repo map. Deterministic by default; purposes are AI and
+// run only on explicit backend flags or --ai (which opts in to the stored
+// config backend) — a bare `pith map` can never silently become a billed op.
+// Purposes are cached by content hash in .pith-map.json, so re-runs are free
+// until a package actually changes.
+func mapCmd(dir string, backend pith.Backend, useAI, jsonOut bool) {
+	if useAI && backend.None() {
+		if cfg, err := pith.LoadConfig(); err == nil {
+			backend.API, backend.Model = cfg.API, cfg.Model
+			backend.Agent, backend.Cmd = cfg.Agent, cfg.Cmd
+		}
+		if backend.None() {
+			die("pith: --ai needs a stored backend (see pith config)")
+		}
+	}
+	pkgs, err := pith.Map(dir)
+	if err != nil {
+		die("pith:", err)
+	}
+	if len(pkgs) == 0 {
+		die("pith: no recognized code under", dir)
+	}
+	if !backend.None() {
+		if err := pith.MapAI(dir, pkgs, backend); err != nil {
+			die("pith:", err)
+		}
+	}
+	if jsonOut {
+		_ = pith.WriteMapJSON(os.Stdout, pkgs)
+	} else {
+		pith.WriteMapText(os.Stdout, dir, pkgs)
 	}
 }
 

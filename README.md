@@ -60,6 +60,15 @@ pith read main.go NewServer   # one specific declaration
 pith read main.go --grep      # output for piping or editor quickfix panels
 ```
 
+### Map a repo
+
+```
+pith map .          # deterministic: one row per package, sizes only
+pith map . --ai     # adds a one-line AI purpose per package (stored backend)
+```
+
+The top rung of the zoom ladder (map → read → explain): every package on one line with how big it is and what it's for. Purposes are cached by content hash in `.pith-map.json`, so a repo is described once and re-runs are free until the code changes. The deterministic part never needs AI; `--ai` (or explicit backend flags) is the opt-in.
+
 ### Search
 
 ```

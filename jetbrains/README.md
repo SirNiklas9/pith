@@ -55,6 +55,7 @@ All actions appear under **pith** in the editor right-click menu.
 |---|---|---|
 | Read File | `Ctrl+Alt+O` | Purpose map of the current file |
 | Read Package | `Ctrl+Alt+Shift+O` | Purpose map of the current folder |
+| Map Project | `Ctrl+Alt+M` | One row per package with a cached one-line AI purpose |
 | Search | `Ctrl+Alt+F` | Find declarations by name/doc across the project |
 | Explain | `Ctrl+Alt+X` | AI deep-dive on the declaration at cursor |
 | Summary | `Ctrl+Alt+S` | AI prose overview of the current file |
@@ -64,7 +65,9 @@ All actions appear under **pith** in the editor right-click menu.
 
 Output appears in the **pith** tool window at the bottom of the IDE. `file:line:` references in read and search output are clickable.
 
-**Edit**: select the lines you want changed first, then hit the shortcut — a dialog asks for the instruction and the edit is applied directly to the file.
+**Edit**: select the lines you want changed first, then hit the shortcut — a dialog asks for the instruction and the edit is applied directly to the file. The same dialog has a **Context** selector (default *None*): how much surrounding code the AI gets as reference, from this file's outline up to the whole project's. Generate has the same selector. Context stays opt-in, per invocation.
+
+**Map Project**: package purposes are AI-generated once and cached by content hash in `.pith-map.json` — re-runs are free until code changes.
 
 **Explain**: place your cursor on or inside a declaration and hit the shortcut — pith finds the nearest declaration at that line.
 

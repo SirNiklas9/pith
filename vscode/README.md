@@ -26,6 +26,7 @@ npx --yes @vscode/vsce package
 |---|---|
 | `Ctrl+Alt+O` | Read the current file (QuickPick — Enter jumps to the declaration) |
 | `Ctrl+Alt+Shift+O` | Read the current folder |
+| `Ctrl+Alt+M` | Map the project — one row per package with a cached one-line AI purpose |
 | `Ctrl+Alt+F` | Search the workspace — prompts for a query, results jump on Enter |
 | `Ctrl+Alt+S` | AI summary of the current file (opens beside the editor) |
 | `Ctrl+Alt+X` | AI explain the declaration at the cursor |
@@ -44,6 +45,7 @@ All commands are also in the palette under **pith:**, including **Work Add at Cu
 - **Binary Path** — leave empty to use the bundled binary (falls back to `pith` on PATH).
 - **Backend Mode** — `config` (recommended: pith's own `pith config` store decides), `agent`, or `api`.
 - **Agent Command / Api Target / Api Model** — used by the respective modes.
+- **Context** — how much surrounding code edit/generate send as reference: `none` (default), a fixed level (`around`/`file`/`dir`/`project`), or `ask` to pick per invocation.
 
 ## How edit applies
 

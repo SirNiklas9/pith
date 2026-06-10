@@ -43,7 +43,10 @@ func collect(target string, recursive bool) ([]Entry, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if skipFile(d.Name()) {
+			return nil
+		}
+		if _, ok := langFor(d.Name()); !ok {
 			return nil
 		}
 		r, e := Gather(path, "")
@@ -59,10 +62,12 @@ func collect(target string, recursive bool) ([]Entry, error) {
 	return all, nil
 }
 
-// skipDir reports whether a directory should be pruned from a recursive walk.
+// skipDir reports whether a directory should be pruned from a recursive walk
+// (shared by search -r and map): vendored deps, build output, hidden dirs.
 func skipDir(name string) bool {
 	switch name {
-	case "vendor", "node_modules", "testdata":
+	case "vendor", "node_modules", "testdata",
+		"build", "dist", "target", "bin", "obj", "out":
 		return true
 	}
 	return strings.HasPrefix(name, ".") // .git, .idea, …

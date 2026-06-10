@@ -3,9 +3,9 @@ package pith.plugin.actions
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFileManager
+import pith.plugin.PithPromptDialog
 import pith.plugin.PithSettings
 
 class GenerateAction : PithAction("Generate File...", "Generate a new file from a prompt") {
@@ -14,13 +14,15 @@ class GenerateAction : PithAction("Generate File...", "Generate a new file from 
         val basePath = project.basePath ?: return
         val backend  = PithSettings.getInstance().backendArgs()
 
-        val relPath = Messages.showInputDialog(
-            project, "New file path (relative to project root):", "pith generate", null
-        ) ?: return
-
-        val prompt = Messages.showInputDialog(
-            project, "What to generate:", "pith generate — $relPath", null
-        ) ?: return
+        val dialog = PithPromptDialog(
+            project, "pith generate", "What to generate:",
+            PithPromptDialog.GENERATE_CONTEXTS,
+            pathLabel = "New file path (relative to project root):"
+        )
+        if (!dialog.showAndGet()) return
+        val relPath = dialog.path
+        val prompt  = dialog.prompt
+        if (relPath.isEmpty() || prompt.isEmpty()) return
 
         val fullPath = "$basePath/$relPath"
 
@@ -28,7 +30,7 @@ class GenerateAction : PithAction("Generate File...", "Generate a new file from 
         // documents they touch would trigger the File Cache Conflict dialog.
         FileDocumentManager.getInstance().saveAllDocuments()
 
-        runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--apply") + backend) {
+        runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--apply") + dialog.contextArgs() + backend) {
             // Refresh VFS then open the new file — the Runnable fires after refresh completes
             VirtualFileManager.getInstance().asyncRefresh {
                 val newFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(fullPath)

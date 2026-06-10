@@ -26,6 +26,11 @@
         <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift O"/>
       </action>
 
+      <action id="pith.Map" class="pith.plugin.actions.MapAction"
+              text="Map Project" description="One row per package: size plus a cached one-line purpose">
+        <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt M"/>
+      </action>
+
       <action id="pith.Search" class="pith.plugin.actions.SearchAction"
               text="Search..." description="Search the project for a query">
         <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt F"/>

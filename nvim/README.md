@@ -51,6 +51,7 @@ Requires Neovim 0.10+ (uses `vim.system` for async).
 | Key | What it does |
 |---|---|
 | `<leader>po` | Purpose map of the current file (deterministic, no AI) |
+| `<leader>pm` | Map the project — one row per package, cached one-line AI purposes |
 | `<CR>` (in float) | Jump to that declaration or search result |
 | `q` / `<Esc>` | Close the float |
 | `<leader>pf` | Search declarations by name across the project |
@@ -73,6 +74,8 @@ require("pith").setup({
   border       = "rounded",   -- float border style
   backend_args = {},          -- extra args for AI ops, e.g. {"--agent", "claude -p"}
   agent        = false,       -- set true when using --agent (edits files directly)
+  context      = nil,         -- nil = none, "ask" = pick per edit/generate,
+                              -- or a fixed level: "around"|"file"|"dir"|"project"
 })
 ```
 

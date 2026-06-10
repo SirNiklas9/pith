@@ -48,6 +48,34 @@ function agentMode() {
   return vscode.workspace.getConfiguration("pith").get("backendMode") === "agent";
 }
 
+// Context args for edit/generate per the pith.context setting; "ask" shows a
+// per-invocation QuickPick over the given levels. Resolves to [] for none, or
+// null if the user dismissed the picker (caller should abort).
+async function contextArgs(levels) {
+  let level = vscode.workspace.getConfiguration("pith").get("context", "none");
+  if (level === "ask") {
+    const items = levels.map(([value, detail]) => ({ label: value, detail }));
+    const picked = await vscode.window.showQuickPick(items, { title: "pith: context to send" });
+    if (!picked) return null;
+    level = picked.label;
+  }
+  if (level === "none" || !levels.some(([v]) => v === level)) return [];
+  return ["--context", level];
+}
+
+const EDIT_CONTEXTS = [
+  ["none", "just the selection"],
+  ["around", "this file's outline"],
+  ["file", "this file's full source"],
+  ["dir", "the folder's outline"],
+  ["project", "the whole project's outline"],
+];
+const GENERATE_CONTEXTS = [
+  ["none", "just the prompt"],
+  ["dir", "the destination folder's outline"],
+  ["project", "the whole project's outline"],
+];
+
 function workspaceRoot() {
   const folders = vscode.workspace.workspaceFolders;
   return folders && folders.length ? folders[0].uri.fsPath : undefined;
@@ -134,6 +162,21 @@ async function cmdReadFolder() {
   await pickAndJump(res.stdout.split("\n"), "read folder");
 }
 
+async function cmdMap() {
+  const root = workspaceRoot();
+  if (!root) { vscode.window.showWarningMessage("pith: open a folder first"); return; }
+  // Purposes are content-hash cached (.pith-map.json), so this is cheap after
+  // the first run. In "config" mode --ai opts in to pith's stored backend.
+  const backend = backendArgs();
+  const args = ["map", root, ...(backend.length ? backend : ["--ai"])];
+  await withProgress("mapping…", async () => {
+    const res = await runPith(args);
+    if (res.code !== 0) return fail(res, "map");
+    const doc = await vscode.workspace.openTextDocument({ content: res.stdout, language: "plaintext" });
+    await vscode.window.showTextDocument(doc, { preview: true });
+  });
+}
+
 async function cmdSearch() {
   const query = await vscode.window.showInputBox({ prompt: "pith search" });
   if (!query) return;
@@ -174,6 +217,8 @@ async function cmdEdit() {
   const end = sel.end.character === 0 && sel.end.line > sel.start.line ? sel.end.line : sel.end.line + 1;
   const prompt = await vscode.window.showInputBox({ prompt: `pith edit ${start}:${end}` });
   if (!prompt) return;
+  const ctx = await contextArgs(EDIT_CONTEXTS);
+  if (ctx === null) return;
 
   const file = editor.document.fileName;
   await withProgress("editing…", async () => {
@@ -181,14 +226,14 @@ async function cmdEdit() {
       // The agent edits files on disk itself (it may touch more than the
       // selection); VS Code only reloads clean docs, so save everything.
       await vscode.workspace.saveAll(false);
-      const res = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, ...backendArgs()]);
+      const res = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, ...ctx, ...backendArgs()]);
       if (res.code !== 0) return fail(res, "edit");
       vscode.window.showInformationMessage("pith: edit applied (agent wrote the file)");
       return;
     }
     // Completion backends: --raw prints just the new region, we splice it
     // into the buffer — no disk writes, native undo.
-    const res = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, "--raw", ...backendArgs()]);
+    const res = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, "--raw", ...ctx, ...backendArgs()]);
     if (res.code !== 0) return fail(res, "edit");
     const range = new vscode.Range(start - 1, 0, end - 1, editor.document.lineAt(end - 1).text.length);
     const text = res.stdout.replace(/\r?\n$/, "");
@@ -202,10 +247,12 @@ async function cmdGenerate() {
   if (!rel) return;
   const prompt = await vscode.window.showInputBox({ prompt: "pith generate — what to generate" });
   if (!prompt) return;
+  const ctx = await contextArgs(GENERATE_CONTEXTS);
+  if (ctx === null) return;
   const root = workspaceRoot();
   const file = path.isAbsolute(rel) ? rel : path.join(root || "", rel);
   await withProgress(`generating ${rel}…`, async () => {
-    const res = await runPith(["generate", file, "--prompt", prompt, "--apply", ...backendArgs()]);
+    const res = await runPith(["generate", file, "--prompt", prompt, "--apply", ...ctx, ...backendArgs()]);
     if (res.code !== 0) return fail(res, "generate");
     const doc = await vscode.workspace.openTextDocument(file);
     await vscode.window.showTextDocument(doc);
@@ -238,6 +285,7 @@ function activate(context) {
   const commands = {
     "pith.read": cmdRead,
     "pith.readFolder": cmdReadFolder,
+    "pith.map": cmdMap,
     "pith.search": cmdSearch,
     "pith.summary": cmdSummary,
     "pith.explain": cmdExplain,

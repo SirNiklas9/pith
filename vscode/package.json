@@ -13,6 +13,7 @@
     "commands": [
       { "command": "pith.read",        "title": "pith: Read File" },
       { "command": "pith.readFolder",  "title": "pith: Read Folder" },
+      { "command": "pith.map",         "title": "pith: Map Project" },
       { "command": "pith.search",      "title": "pith: Search…" },
       { "command": "pith.summary",     "title": "pith: Summary" },
       { "command": "pith.explain",     "title": "pith: Explain at Cursor" },
@@ -24,6 +25,7 @@
     "keybindings": [
       { "command": "pith.read",       "key": "ctrl+alt+o",       "when": "editorTextFocus" },
       { "command": "pith.readFolder", "key": "ctrl+alt+shift+o", "when": "editorTextFocus" },
+      { "command": "pith.map",        "key": "ctrl+alt+m" },
       { "command": "pith.search",     "key": "ctrl+alt+f" },
       { "command": "pith.summary",    "key": "ctrl+alt+s",       "when": "editorTextFocus" },
       { "command": "pith.explain",    "key": "ctrl+alt+x",       "when": "editorTextFocus" },
@@ -64,6 +66,20 @@
           "type": "string",
           "default": "anthropic/claude-haiku-4.5",
           "description": "Model name used when backend mode is 'api'."
+        },
+        "pith.context": {
+          "type": "string",
+          "enum": ["none", "ask", "around", "file", "dir", "project"],
+          "enumDescriptions": [
+            "No context — the AI sees only the selection/prompt (pith's default).",
+            "Pick the context level each time edit/generate runs.",
+            "This file's outline.",
+            "This file's full source.",
+            "The folder's outline.",
+            "The whole project's outline."
+          ],
+          "default": "none",
+          "description": "How much surrounding code edit/generate send as reference context."
         }
       }
     }

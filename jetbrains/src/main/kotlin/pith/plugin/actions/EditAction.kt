@@ -5,9 +5,9 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.wm.ToolWindowManager
+import pith.plugin.PithPromptDialog
 import pith.plugin.PithRunner
 import pith.plugin.PithSettings
 import pith.plugin.PithToolWindowFactory
@@ -28,9 +28,13 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
         val start = doc.getLineNumber(sel.selectionStart) + 1
         val end   = doc.getLineNumber(sel.selectionEnd)   + 1
 
-        val prompt = Messages.showInputDialog(
-            project, "Edit instruction (lines $start–$end):", "pith edit", null
-        ) ?: return
+        val dialog = PithPromptDialog(
+            project, "pith edit", "Instruction (lines $start–$end):",
+            PithPromptDialog.EDIT_CONTEXTS
+        )
+        if (!dialog.showAndGet()) return
+        val prompt = dialog.prompt
+        if (prompt.isEmpty()) return
 
         // Save EVERYTHING, not just this document: an agent backend has latitude
         // to touch files beyond the selection, and an externally-rewritten file
@@ -43,7 +47,8 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
         // the document itself — disk changes only through IntelliJ, which makes
         // a File Cache Conflict impossible. An agent backend ignores --raw and
         // writes the file directly; the mtime watcher below catches that case.
-        val args    = listOf("edit", file, "--range", "$start:$end", "--prompt", prompt, "--raw") + backend
+        val args    = listOf("edit", file, "--range", "$start:$end", "--prompt", prompt, "--raw") +
+                      dialog.contextArgs() + backend
         val workDir = project.basePath ?: return
 
         ToolWindowManager.getInstance(project).getToolWindow("pith")?.show()
