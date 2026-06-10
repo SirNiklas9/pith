@@ -106,6 +106,8 @@ pith generate services/cache.go --prompt "an LRU cache" --apply --cmd "ollama ru
 
 Agent mode (`--agent`) lets the AI edit files directly in its own way. Completion mode (`--api`, `--cmd`) has pith splice the result in surgically.
 
+Two caveats on the Claude row: `--dangerously-skip-permissions` is what makes hands-off edits work, but it grants the agent unrestricted file writes — drop the flag if you'd rather approve each change. And headless `claude -p` is typically metered (billed per use) separately from a chat subscription — check your plan before pointing tooling at it.
+
 #### Optional context
 
 By default, only your selected lines and prompt are sent to the AI. If you want it to see more:
