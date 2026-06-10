@@ -2,7 +2,7 @@
   "name": "pith",
   "displayName": "pith",
   "description": "The pith of your code. Read, search, explain, and edit any codebase via the bundled pith CLI.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "SirNiklas9",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/SirNiklas9/pith" },
@@ -68,12 +68,20 @@
           "default": "anthropic/claude-haiku-4.5",
           "description": "Model name used when backend mode is 'api'."
         },
+        "pith.preview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Preview the resolved context and token estimate (pith --dry-run) with a Send/Cancel gate before every AI edit."
+        },
         "pith.context": {
           "type": "string",
-          "enum": ["none", "ask", "around", "file", "dir", "project"],
+          "enum": ["none", "ask", "uses:dir", "uses:dir:full", "uses:dir:3:full", "around", "file", "dir", "project"],
           "enumDescriptions": [
             "No context — the AI sees only the selection/prompt (pith's default).",
             "Pick the context level each time edit/generate runs.",
+            "Outlines of the declarations the selection references (this folder). Edit only.",
+            "Full implementations of the declarations the selection references. Edit only.",
+            "Follow the reference chain 3 hops — implementations of what those use too. Edit only.",
             "This file's outline.",
             "This file's full source.",
             "The folder's outline.",

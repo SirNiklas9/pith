@@ -27,7 +27,7 @@ import (
 
 func main() {
 	args := os.Args[1:]
-	var jsonOut, grepOut, vsOut, apply, raw, recursive, allFlag, aiFlag bool
+	var jsonOut, grepOut, vsOut, apply, raw, recursive, allFlag, aiFlag, dryRun bool
 	var backend pith.Backend
 	var rangeArg, promptArg, atArg, contextArg string
 	var pos []string
@@ -55,6 +55,8 @@ func main() {
 			recursive = true
 		case a == "--ai":
 			aiFlag = true
+		case a == "--dry-run":
+			dryRun = true
 		case a == "--all":
 			allFlag = true
 		case a == "--at":
@@ -100,7 +102,7 @@ func main() {
 		"  pith explain  <file> <name> --cmd \"<llm>\"            deep explanation of one declaration\n" +
 		"  pith explain  <file:line>  --cmd \"<llm>\"\n" +
 		"  pith summary  <file|dir> --cmd \"<llm>\"\n" +
-		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project]\n" +
+		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project|uses[:dir|:project][:N][:full]]\n" +
 		"  pith generate <newfile> --prompt \"...\" --cmd \"<llm>\" [--apply] [--context file|dir|project]\n" +
 		"  pith work     [add \"<note>\" [--at file:line] | done <id> | rm <id> | clear | --all]\n" +
 		"  pith config   [set <name> <value> | unset <name> | path]   set-and-forget backend + API keys"
@@ -223,15 +225,15 @@ func main() {
 		}
 		fmt.Println(out)
 	case "edit":
-		if backend.None() {
+		if backend.None() && !dryRun {
 			die(pith.NoBackendMsg)
 		}
-		editCmd(target, rangeArg, promptArg, backend, apply, raw, contextArg)
+		editCmd(target, rangeArg, promptArg, backend, apply, raw, contextArg, dryRun)
 	case "generate", "gen":
-		if backend.None() {
+		if backend.None() && !dryRun {
 			die(pith.NoBackendMsg)
 		}
-		generateCmd(target, promptArg, backend, apply, raw, contextArg)
+		generateCmd(target, promptArg, backend, apply, raw, contextArg, dryRun)
 	default:
 		die("pith: unknown command", cmd)
 	}
@@ -240,7 +242,7 @@ func main() {
 // editCmd sends a line range + an instruction to the backend and applies the
 // result. Diff by default (review), --apply writes it, --raw prints just the
 // new region (for an editor to replace the selection with).
-func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw bool, ctxLevel string) {
+func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw bool, ctxLevel string, dryRun bool) {
 	if rangeArg == "" || prompt == "" {
 		die("pith edit needs --range A:B and --prompt \"...\"")
 	}
@@ -257,9 +259,23 @@ func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw boo
 		die(fmt.Sprintf("pith: range %d:%d out of bounds (file has %d lines)", a, b, len(lines)))
 	}
 	region := strings.Join(lines[a-1:b], "\n")
-	context, err := pith.BuildContext(file, ctxLevel)
+	context, err := pith.BuildContextRegion(file, ctxLevel, a, b)
 	if err != nil {
 		die("pith:", err)
+	}
+
+	// DRY RUN: assemble everything exactly as a real call would, then report
+	// instead of sending — what the context resolved to, and what it weighs.
+	// Deterministic, offline, keyless.
+	if dryRun {
+		full := pith.EditPrompt(file, region, prompt, context)
+		if backend.IsAgent() {
+			full = pith.AgentEditTask(file, a, b, region, prompt, context)
+		}
+		printDryRun(fmt.Sprintf("edit %s %d:%d", file, a, b), ctxLevel, file, a, b,
+			[][2]any{{fmt.Sprintf("region (lines %d:%d)", a, b), len(region)}, {"context", len(context)}, {"instruction", len(prompt)}},
+			full, raw)
+		return
 	}
 
 	// AGENT backend: hand it the task and let the agent edit the file ITSELF —
@@ -300,7 +316,7 @@ func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw boo
 // same-file context, no search: that is all opt-in and lives behind an explicit
 // flag, never automatic. Refuses to overwrite a non-empty file (use edit for
 // those); an empty file is fillable, so the editor "New File → fill" flow works.
-func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool, ctxLevel string) {
+func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool, ctxLevel string, dryRun bool) {
 	if prompt == "" {
 		die("pith generate needs --prompt \"...\"")
 	}
@@ -310,6 +326,16 @@ func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool, ctx
 	context, err := pith.BuildContext(file, ctxLevel)
 	if err != nil {
 		die("pith:", err)
+	}
+
+	if dryRun {
+		full := pith.GeneratePrompt(file, prompt, context)
+		if backend.IsAgent() {
+			full = pith.AgentGenerateTask(file, prompt, context)
+		}
+		printDryRun("generate "+file, ctxLevel, file, 0, 0,
+			[][2]any{{"context", len(context)}, {"instruction", len(prompt)}}, full, raw)
+		return
 	}
 
 	// AGENT backend: let the agent create the file ITSELF; pith does not write.
@@ -515,6 +541,45 @@ func parseAt(s string) (file string, line int) {
 		}
 	}
 	return s, 0
+}
+
+// printDryRun renders the deterministic preview of an AI op: the uses hop
+// tree (when the context level is relational), a byte/~token budget per prompt
+// part, and — with --raw — the exact prompt. Offline, keyless, free.
+func printDryRun(op, ctxLevel, file string, a, b int, parts [][2]any, full string, raw bool) {
+	fmt.Printf("DRY RUN  pith %s  (nothing sent — offline, keyless)\n\n", op)
+
+	if strings.HasPrefix(ctxLevel, "uses") {
+		decls, _, err := pith.UsesClosure(file, ctxLevel, a, b)
+		if err == nil {
+			fmt.Printf("context %s — %d declaration(s) resolved\n", ctxLevel, len(decls))
+			for _, d := range decls {
+				fmt.Printf("  hop %d  %s:%d  %s  [%d B]\n", d.Hop, d.File, d.Line, d.Sig, len(d.Source))
+			}
+			fmt.Println()
+		}
+	} else if ctxLevel != "" && ctxLevel != "none" {
+		fmt.Printf("context %s\n\n", ctxLevel)
+	}
+
+	fmt.Println("prompt budget                    bytes   ~tokens")
+	known := 0
+	for _, p := range parts {
+		name, n := p[0].(string), p[1].(int)
+		known += n
+		fmt.Printf("  %-28s %7d   %7d\n", name, n, pith.EstimateTokens(n))
+	}
+	scaffold := len(full) - known
+	fmt.Printf("  %-28s %7d   %7d\n", "scaffolding", scaffold, pith.EstimateTokens(scaffold))
+	lo, hi := pith.EstimateTokensRange(len(full))
+	fmt.Printf("  %-28s %7d   %d–%d\n", "TOTAL", len(full), lo, hi)
+	fmt.Println("\n~tokens = bytes/4 per part; the total is a range covering all mainstream tokenizers")
+	if raw {
+		fmt.Println("\n--- exact prompt ---")
+		fmt.Println(full)
+	} else {
+		fmt.Println("(add --raw to print the exact prompt)")
+	}
 }
 
 // renderDiff prints the old region (-) vs the proposed new region (+).

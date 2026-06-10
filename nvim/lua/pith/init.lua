@@ -27,14 +27,17 @@
 local M = {}
 
 -- Pinned pith release this plugin auto-downloads when no binary is found.
-M.version = "0.4.0"
+M.version = "0.4.1"
 
 local config = {
   bin          = nil,   -- explicit binary path; nil = resolve automatically
   backend_args = {},    -- { "--agent", "claude --dangerously-skip-permissions -p" }
   agent        = false, -- true when backend edits files itself (edit reloads buffer)
   context      = nil,   -- nil = none, "ask" = pick per edit/generate, or a fixed
-                        -- level: "around"|"file"|"dir"|"project"
+                        -- level: "uses:dir"|"uses:dir:full"|"around"|"file"|"dir"|"project"
+  preview      = true,  -- show the --dry-run report (context + token estimate)
+                        -- and confirm before sending an edit; "Always send"
+                        -- disables it for the session
   width        = 0.7,
   height       = 0.7,
   border       = "rounded",
@@ -341,7 +344,7 @@ function M.edit()
   if s < 1 then vim.notify("pith: make a visual selection first", vim.log.levels.WARN); return end
   vim.ui.input({ prompt = "pith edit: " }, function(instruction)
     if not instruction or instruction == "" then return end
-    with_context({ "around", "file", "dir", "project" }, function(ctx_args)
+    with_context({ "uses:dir", "uses:dir:full", "uses:dir:3:full", "around", "file", "dir", "project" }, function(ctx_args)
       vim.notify("pith: editing…", vim.log.levels.INFO)
       if config.agent and vim.bo.modified then
         vim.cmd("silent noautocmd write")
@@ -352,7 +355,9 @@ function M.edit()
       end
       vim.list_extend(args, ctx_args)
       vim.list_extend(args, config.backend_args)
-      run_async(args, function(out, err)
+
+      local function send()
+        run_async(args, function(out, err)
         if not out then
           vim.notify("pith: " .. (err or "failed"), vim.log.levels.ERROR)
           return
@@ -371,6 +376,28 @@ function M.edit()
           vim.api.nvim_buf_set_lines(0, s - 1, e, false, (t == "") and {} or vim.split(t, "\n"))
           vim.notify("pith: applied (u to undo)", vim.log.levels.INFO)
         end
+        end)
+      end
+
+      if not config.preview then return send() end
+      -- Preview gate: deterministic --dry-run (context resolved + token
+      -- estimate), then confirm. "Always send" disables it for the session;
+      -- set preview = false in setup() to persist.
+      local dry = {}
+      for _, v in ipairs(args) do
+        if v ~= "--raw" then table.insert(dry, v) end
+      end
+      table.insert(dry, "--dry-run")
+      run_async(dry, function(out, err)
+        if not out then vim.notify("pith: preview failed — " .. (err or "?"), vim.log.levels.ERROR); return end
+        local choice = vim.fn.confirm(vim.trim(out), "&Send\n&Always send directly\n&Cancel", 1)
+        if choice == 2 then
+          config.preview = false
+          vim.notify("pith: preview off for this session (set preview = false in setup() to persist)")
+        elseif choice ~= 1 then
+          return
+        end
+        send()
       end)
     end)
   end)

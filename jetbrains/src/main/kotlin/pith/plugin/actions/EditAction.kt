@@ -5,8 +5,12 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.util.ExecUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.wm.ToolWindowManager
+import pith.plugin.PithBinary
+import pith.plugin.PithPreviewDialog
 import pith.plugin.PithPromptDialog
 import pith.plugin.PithRunner
 import pith.plugin.PithSettings
@@ -49,6 +53,26 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
         // writes the file directly; the mtime watcher below catches that case.
         val args    = listOf("edit", file, "--range", "$start:$end", "--prompt", prompt, "--raw") +
                       dialog.contextArgs() + backend
+
+        // Preview gate: run the same command as --dry-run (deterministic,
+        // offline) and show what the context resolved to + the token estimate
+        // before anything is sent. The dialog's checkbox flips this off for good.
+        val settings = PithSettings.getInstance().state
+        if (settings.previewBeforeSend) {
+            val dry = GeneralCommandLine()
+                .withExePath(PithBinary.resolve())
+                .withParameters(args.filter { it != "--raw" } + "--dry-run")
+                .withWorkDirectory(project.basePath)
+                .withCharset(Charsets.UTF_8)
+            val report = try {
+                ExecUtil.execAndGetOutput(dry, 15_000).stdout
+            } catch (ex: Exception) {
+                "preview failed: ${ex.message}"
+            }
+            val preview = PithPreviewDialog(project, report)
+            if (!preview.showAndGet()) return
+            if (preview.dontAskAgain()) settings.previewBeforeSend = false
+        }
         val workDir = project.basePath ?: return
 
         ToolWindowManager.getInstance(project).getToolWindow("pith")?.show()

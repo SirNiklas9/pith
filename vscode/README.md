@@ -45,7 +45,7 @@ All commands are also in the palette under **pith:**, including **Work Add at Cu
 - **Binary Path** — leave empty to use the bundled binary (falls back to `pith` on PATH).
 - **Backend Mode** — `config` (recommended: pith's own `pith config` store decides), `agent`, or `api`.
 - **Agent Command / Api Target / Api Model** — used by the respective modes.
-- **Context** — how much surrounding code edit/generate send as reference: `none` (default), a fixed level (`around`/`file`/`dir`/`project`), or `ask` to pick per invocation.
+- **Context** — how much surrounding code edit/generate send as reference: `none` (default), `ask` to pick per invocation, or a fixed level. `uses:dir` / `uses:dir:full` send only the declarations your selection references (outlines or full implementations) — the least context with the most meaning; `around`/`file`/`dir`/`project` are the positional levels.
 
 ## How edit applies
 

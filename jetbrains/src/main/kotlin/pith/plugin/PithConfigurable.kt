@@ -3,6 +3,7 @@ package pith.plugin
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.Messages
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
@@ -25,6 +26,7 @@ class PithConfigurable : Configurable {
     private val apiField    = JBTextField()
     private val modelField  = JBTextField()
     private val keyField    = JBPasswordField()
+    private val previewBox  = JBCheckBox("Preview context && cost before sending AI edits")
 
     override fun getDisplayName() = "pith"
 
@@ -37,6 +39,7 @@ class PithConfigurable : Configurable {
         .addLabeledComponent(JBLabel("API model:"), modelField)
         .addLabeledComponent(JBLabel("API key:"), keyField)
         .addComponentToRightColumn(JBLabel("Saved to pith's own config store on Apply — never kept in the IDE."))
+        .addComponent(previewBox)
         .addComponentFillVertically(JPanel(), 0)
         .panel
 
@@ -57,6 +60,7 @@ class PithConfigurable : Configurable {
                selectedMode()   != s.backendMode ||
                apiField.text    != s.apiTarget ||
                modelField.text  != s.apiModel ||
+               previewBox.isSelected != s.previewBeforeSend ||
                keyField.password.isNotEmpty()
     }
 
@@ -67,6 +71,7 @@ class PithConfigurable : Configurable {
         s.backendMode  = selectedMode()
         s.apiTarget    = apiField.text.trim()
         s.apiModel     = modelField.text.trim()
+        s.previewBeforeSend = previewBox.isSelected
 
         // The key is write-through: handed once to `pith config set`, which owns
         // it from then on (file-permission-protected, masked, shared by every
@@ -100,6 +105,7 @@ class PithConfigurable : Configurable {
             ?: modes.keys.first()
         apiField.text   = s.apiTarget
         modelField.text = s.apiModel
+        previewBox.isSelected = s.previewBeforeSend
         keyField.setText("")
     }
 }

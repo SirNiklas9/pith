@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pith — how context works</title>
+<style>
+  :root {
+    --bg: #0e1117; --surface: #161b24; --surface2: #1d2430;
+    --line: #2a3342; --text: #d7dde8; --dim: #8b95a7;
+    --accent: #4ade80;          /* deterministic green */
+    --ai: #c084fc;              /* AI purple — appears exactly once */
+    --warn: #fbbf24;
+    --mono: "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, sans-serif; padding: 48px 24px 96px; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1 { font-family: var(--mono); font-size: 28px; letter-spacing: -.5px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--dim); margin: 8px 0 48px; max-width: 640px; }
+  h2 { font-family: var(--mono); font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: var(--accent); margin: 64px 0 6px; }
+  h2.first { margin-top: 0; }
+  .lede { color: var(--dim); margin-bottom: 24px; max-width: 720px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 28px; }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+  code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; }
+
+  /* ── section 1: the boundary ─────────────────────────── */
+  .boundary { display: grid; grid-template-columns: 1fr 150px 1fr; align-items: stretch; gap: 0; }
+  .side { border-radius: 12px; border: 1px solid var(--line); padding: 22px; }
+  .side h3 { font-family: var(--mono); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 14px; }
+  .det { background: #12211a; border-color: #1e4632; }
+  .det h3 { color: var(--accent); }
+  .aiend { background: #1d1426; border-color: #4c2a66; }
+  .aiend h3 { color: var(--ai); }
+  .side ul { list-style: none; }
+  .side li { padding: 7px 0 7px 22px; position: relative; color: var(--text); font-size: 14px; }
+  .det li::before { content: "▸"; position: absolute; left: 2px; color: var(--accent); }
+  .aiend li::before { content: "▸"; position: absolute; left: 2px; color: var(--ai); }
+  .side .none { color: var(--dim); font-style: italic; }
+  .pipe { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+  .pipe .arrow { font-family: var(--mono); color: var(--accent); font-size: 22px; }
+  .pipe .label { font-family: var(--mono); font-size: 10.5px; color: var(--dim); text-align: center; line-height: 1.5; }
+
+  /* ── section 2: scope rings ──────────────────────────── */
+  .rings { display: grid; grid-template-columns: 380px 1fr; gap: 32px; align-items: center; }
+  svg text { font-family: var(--mono); }
+  .ringkey { list-style: none; }
+  .ringkey li { padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .ringkey li:last-child { border-bottom: 0; }
+  .ringkey b { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+  .ringkey .dim { color: var(--dim); }
+
+  /* ── section 3: hop search ───────────────────────────── */
+  .hops { font-family: var(--mono); font-size: 13px; }
+  .hoprow { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px dashed var(--line); align-items: start; }
+  .hoprow:last-child { border-bottom: 0; }
+  .hoplabel { color: var(--accent); font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; padding-top: 8px; }
+  .hoplabel small { display: block; color: var(--dim); text-transform: none; letter-spacing: 0; margin-top: 2px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; }
+  .card { background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  .card .loc { color: var(--dim); font-size: 11px; }
+  .card.sel { border-color: var(--accent); background: #12211a; }
+  .card.hit { border-color: #3b82f6; }
+  .card.dead { opacity: .45; border-style: dashed; }
+  .card .why { display: block; color: var(--warn); font-size: 11px; margin-top: 4px; }
+  .card.dead .why { color: var(--dim); }
+  .flow { color: var(--dim); font-size: 12px; padding: 2px 0 2px 136px; }
+  .flow b { color: var(--text); font-weight: 600; }
+
+  /* ── section 4: level weights ────────────────────────── */
+  .levels { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .levels td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .levels tr:last-child td { border-bottom: 0; }
+  .levels .lvl { font-family: var(--mono); color: var(--text); white-space: nowrap; width: 170px; }
+  .levels .what { color: var(--dim); width: 42%; font-size: 13.5px; }
+  .bar { height: 14px; border-radius: 3px; background: linear-gradient(90deg, #166534, var(--accent)); min-width: 3px; }
+  .bar.pos { background: linear-gradient(90deg, #1e3a5f, #3b82f6); }
+  .tok { font-family: var(--mono); font-size: 12px; color: var(--dim); white-space: nowrap; padding-left: 10px; }
+
+  /* ── section 5: budget ───────────────────────────────── */
+  .stack { display: flex; height: 34px; border-radius: 8px; overflow: hidden; font-family: var(--mono); font-size: 11px; margin: 18px 0 8px; }
+  .stack div { display: flex; align-items: center; justify-content: center; color: #0b0e13; font-weight: 700; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--dim); margin-bottom: 20px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  pre.report { background: #0b0e13; border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; overflow-x: auto; color: var(--text); }
+  pre.report .g { color: var(--accent); } pre.report .d { color: var(--dim); } pre.report .y { color: var(--warn); }
+  .caps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+  .cap { background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 16px; font-size: 13px; }
+  .cap b { font-family: var(--mono); color: var(--warn); display: block; font-size: 15px; margin-bottom: 4px; }
+  .foot { margin-top: 64px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>pith<span> — how context works</span></h1>
+<p class="sub">Every box on this page except the purple one is deterministic — tree-sitter parses, name resolution, byte math. No AI runs anywhere in the pipeline until the final assembled prompt crosses the boundary.</p>
+
+<!-- ════ 1 ════ -->
+<h2 class="first">1 · The boundary</h2>
+<p class="lede">pith touches the code. The model only ever touches the context pith assembled.</p>
+<div class="boundary">
+  <div class="side det">
+    <h3>your machine — deterministic</h3>
+    <ul>
+      <li>parse selection (tree-sitter)</li>
+      <li>collect identifiers</li>
+      <li>resolve names in your scope</li>
+      <li>follow the chain N hops</li>
+      <li>weigh bytes → ~tokens</li>
+      <li>cap, assemble, preview</li>
+    </ul>
+  </div>
+  <div class="pipe">
+    <span class="label">one assembled<br>prompt</span>
+    <span class="arrow">──▶</span>
+    <span class="label">the only thing<br>AI ever sees</span>
+  </div>
+  <div class="side aiend">
+    <h3>the model — AI</h3>
+    <ul>
+      <li>generate the new region</li>
+      <li class="none">no file access</li>
+      <li class="none">no search ability</li>
+      <li class="none">no repo visibility</li>
+      <li class="none">nothing beyond the prompt</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════ 2 ════ -->
+<h2>2 · Scopes — how far resolution may reach</h2>
+<p class="lede">A scope is a permission boundary, not a search hint. <code>uses</code> resolves names only inside the ring you named — it never silently widens.</p>
+<div class="panel rings">
+  <svg viewBox="0 0 360 330" width="380">
+    <circle cx="180" cy="168" r="152" fill="#13202e" stroke="#3b82f6" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <circle cx="180" cy="168" r="104" fill="#15273b" stroke="#3b82f6" stroke-width="1.4"/>
+    <circle cx="180" cy="168" r="60"  fill="#12211a" stroke="#4ade80" stroke-width="1.4"/>
+    <circle cx="180" cy="168" r="22"  fill="#4ade80"/>
+    <text x="180" y="172" text-anchor="middle" font-size="10" fill="#0b0e13" font-weight="700">sel</text>
+    <text x="180" y="120" text-anchor="middle" font-size="11" fill="#4ade80">file</text>
+    <text x="180" y="76"  text-anchor="middle" font-size="11" fill="#7eb3f7">dir</text>
+    <text x="180" y="30"  text-anchor="middle" font-size="11" fill="#7eb3f7">project (git root)</text>
+  </svg>
+  <ul class="ringkey">
+    <li><b>selection</b><span class="dim"> — the lines you highlighted. Always sent; never needs permission.</span></li>
+    <li><b>uses</b><span class="dim"> — resolve only against declarations in this file.</span></li>
+    <li><b>uses:dir</b><span class="dim"> — …and every file sitting next to it (your <code>settings/</code> case).</span></li>
+    <li><b>uses:project</b><span class="dim"> — …anywhere under the enclosing git root. The hard outer wall.</span></li>
+    <li><b>opt-in, every time</b><span class="dim"> — default is <code>none</code>; a ring is only crossed because you picked it for this one edit.</span></li>
+  </ul>
+</div>
+
+<!-- ════ 3 ════ -->
+<h2>3 · The search — breadth-first, name-exact, no AI</h2>
+<p class="lede">Real run from the test fixture: editing <code>Caller</code> in <code>b.go</code> with <code>uses:dir:2:full</code>. Blue cards get sent; dashed cards show what the search correctly refuses to send.</p>
+<div class="panel hops">
+
+  <div class="hoprow">
+    <div class="hoplabel">selection<small>b.go 5:8</small></div>
+    <div class="cards">
+      <div class="card sel">func Caller(names []string)<span class="loc">calls Helper(n)</span></div>
+    </div>
+  </div>
+  <p class="flow">tree-sitter leaf walk → identifiers found: <b>{ Helper, names, out, n, append }</b> → match against scope's declaration index</p>
+
+  <div class="hoprow">
+    <div class="hoplabel">hop 1<small>what it references</small></div>
+    <div class="cards">
+      <div class="card hit">func Helper(name string) string<span class="loc">a.go:4 — calls Util(…)</span></div>
+      <div class="card dead">func Unused() int<span class="loc">a.go:9</span><span class="why">name never appears in selection — excluded</span></div>
+    </div>
+  </div>
+  <p class="flow">parse <b>Helper's own body</b> → new identifiers: <b>{ Util }</b> → resolve again, same scope</p>
+
+  <div class="hoprow">
+    <div class="hoplabel">hop 2<small>what those reference</small></div>
+    <div class="cards">
+      <div class="card hit">func Util(s string) string<span class="loc">c.go:4</span></div>
+      <div class="card dead">func Cycler() string<span class="loc">c.go:8 — calls Util</span><span class="why">references Util, but nothing references IT — wrong direction, excluded</span></div>
+    </div>
+  </div>
+  <p class="flow">depth reached → stop. Already-resolved names are never chased twice, so cycles terminate. Result: <b>2 declarations</b>, in dependency order, closest first.</p>
+
+</div>
+
+<!-- ════ 4 ════ -->
+<h2>4 · The ladder — every level, weighed</h2>
+<p class="lede">Green = relational (follows what your code references). Blue = positional (a place, outlined or raw). Bars are typical prompt weight.</p>
+<div class="panel">
+<table class="levels">
+  <tr><td class="lvl">none <span style="color:var(--dim)">(default)</span></td><td class="what">just your selection + instruction</td><td><div class="bar" style="width:2%"></div></td><td class="tok">~50–500</td></tr>
+  <tr><td class="lvl">uses</td><td class="what">outlines of what the selection references</td><td><div class="bar" style="width:5%"></div></td><td class="tok">~300</td></tr>
+  <tr><td class="lvl">uses:full</td><td class="what">their real implementations — your style, only the relevant slice</td><td><div class="bar" style="width:16%"></div></td><td class="tok">~1–2K</td></tr>
+  <tr><td class="lvl">uses:dir:3:full</td><td class="what">the chain, 3 hops deep, implementations</td><td><div class="bar" style="width:38%"></div></td><td class="tok">~2–6K</td></tr>
+  <tr><td class="lvl">around / dir</td><td class="what">outline of this file / this folder</td><td><div class="bar pos" style="width:12%"></div></td><td class="tok">~300–1.5K</td></tr>
+  <tr><td class="lvl">project</td><td class="what">outline of everything under the git root</td><td><div class="bar pos" style="width:34%"></div></td><td class="tok">~2–5K</td></tr>
+  <tr><td class="lvl">file</td><td class="what">the whole file, raw</td><td><div class="bar pos" style="width:70%"></div></td><td class="tok">~2–10K+</td></tr>
+</table>
+</div>
+
+<!-- ════ 5 ════ -->
+<h2>5 · The tokenizer — weighed before it's spent</h2>
+<p class="lede"><code>--dry-run</code> assembles the exact prompt, weighs every part (<code>~tokens = bytes ÷ 4</code>, code-typical), and sends nothing. The editors show this as the preview gate — until you tick “don't ask again”.</p>
+<div class="panel">
+  <div class="stack">
+    <div style="width:11%; background:#4ade80;">region</div>
+    <div style="width:19%; background:#34d399;">context</div>
+    <div style="width:3%;  background:#fbbf24;"></div>
+    <div style="width:67%; background:#64748b;">scaffolding (fixed prompt rules)</div>
+  </div>
+  <div class="legend">
+    <span><i style="background:#4ade80"></i>region 78 B</span>
+    <span><i style="background:#34d399"></i>context 132 B</span>
+    <span><i style="background:#fbbf24"></i>instruction 18 B</span>
+    <span><i style="background:#64748b"></i>scaffolding 478 B</span>
+  </div>
+<pre class="report"><span class="d">$</span> pith edit b.go --range 5:8 --prompt "add error handling" --context uses:dir:2:full <span class="g">--dry-run</span>
+
+<span class="g">DRY RUN</span>  pith edit b.go 5:8  <span class="d">(nothing sent — offline, keyless)</span>
+
+context uses:dir:2:full — 2 declaration(s) resolved
+  <span class="g">hop 1</span>  a.go:4  func Helper(name string) string  <span class="d">[62 B]</span>
+  <span class="g">hop 2</span>  c.go:4  func Util(s string) string  <span class="d">[46 B]</span>
+
+prompt budget                    bytes   ~tokens
+  region (lines 5:8)                78        20
+  context                          132        33
+  instruction                       18         5
+  scaffolding                      478       120
+  <span class="y">TOTAL                            706       177</span></pre>
+
+  <div class="caps">
+    <div class="cap"><b>40 decls</b>hard cap on declarations — BFS order means the farthest hops are cut first, never the closest.</div>
+    <div class="cap"><b>24 KB</b>source budget in <code>:full</code> mode — past it, declarations degrade to outline lines instead of flooding or vanishing.</div>
+    <div class="cap"><b>÷ 4</b>bytes-to-tokens estimate. Exact counts are tokenizer-specific and vendor-owned; the estimate is deterministic and yours.</div>
+  </div>
+</div>
+
+<p class="foot">pith · deterministic context engine · the model never touches the repo — it reads one prompt, assembled and weighed on your machine.</p>
+
+</main>
+</body>
+</html>

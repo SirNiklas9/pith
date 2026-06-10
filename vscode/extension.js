@@ -65,6 +65,9 @@ async function contextArgs(levels) {
 
 const EDIT_CONTEXTS = [
   ["none", "just the selection"],
+  ["uses:dir", "what the selection references — outlines (this folder)"],
+  ["uses:dir:full", "what the selection references — full implementations"],
+  ["uses:dir:3:full", "follow the chain 3 hops — implementations of what those use too"],
   ["around", "this file's outline"],
   ["file", "this file's full source"],
   ["dir", "the folder's outline"],
@@ -221,6 +224,22 @@ async function cmdEdit() {
   if (ctx === null) return;
 
   const file = editor.document.fileName;
+
+  // Preview gate: a deterministic --dry-run (what the context resolved to +
+  // the token estimate) with a Send/Cancel modal. "Always send directly"
+  // flips the pith.preview setting off globally.
+  if (vscode.workspace.getConfiguration("pith").get("preview", true)) {
+    const dry = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, ...ctx, "--dry-run"]);
+    if (dry.code !== 0) return fail(dry, "preview");
+    const choice = await vscode.window.showInformationMessage(
+      "pith — preview before send", { modal: true, detail: dry.stdout },
+      "Send", "Always send directly"
+    );
+    if (!choice) return;
+    if (choice === "Always send directly") {
+      await vscode.workspace.getConfiguration("pith").update("preview", false, vscode.ConfigurationTarget.Global);
+    }
+  }
   await withProgress("editing…", async () => {
     if (agentMode()) {
       // The agent edits files on disk itself (it may touch more than the

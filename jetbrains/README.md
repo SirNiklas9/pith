@@ -65,7 +65,7 @@ All actions appear under **pith** in the editor right-click menu.
 
 Output appears in the **pith** tool window at the bottom of the IDE. `file:line:` references in read and search output are clickable.
 
-**Edit**: select the lines you want changed first, then hit the shortcut — a dialog asks for the instruction and the edit is applied directly to the file. The same dialog has a **Context** selector (default *None*): how much surrounding code the AI gets as reference, from this file's outline up to the whole project's. Generate has the same selector. Context stays opt-in, per invocation.
+**Edit**: select the lines you want changed first, then hit the shortcut — a dialog asks for the instruction and the edit is applied directly to the file. The same dialog has a **Context** selector (default *None*): how much surrounding code the AI gets as reference. **Uses** is the sweet spot — pith parses your selection, finds the declarations it actually references, and sends just those (outlines, or full implementations with *Uses full*): the least context with the most meaning. The positional levels (file/dir/project outlines, full file) are there too. Generate has the same selector. Context stays opt-in, per invocation.
 
 **Map Project**: package purposes are AI-generated once and cached by content hash in `.pith-map.json` — re-runs are free until code changes.
 

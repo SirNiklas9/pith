@@ -60,6 +60,22 @@ func declsFromSource(file string, src []byte) (entries []Entry, pkg string, err 
 		out = append(out, e)
 	}
 
+	emitValue := func(spec *ts.Node, kind string) {
+		name := spec.ChildByFieldName("name", lang)
+		if name == nil {
+			return
+		}
+		out = append(out, Entry{
+			File:   file,
+			Line:   int(spec.StartPoint().Row) + 1,
+			Kind:   kind,
+			Name:   name.Text(src),
+			Sig:    firstLineTrim(spec.Text(src)),
+			What:   docAbove(spec, src, lang),
+			Source: spec.Text(src),
+		})
+	}
+
 	var walk func(node *ts.Node, enclosing string)
 	walk = func(node *ts.Node, enclosing string) {
 		for i := 0; i < node.NamedChildCount(); i++ {
@@ -94,6 +110,10 @@ func declsFromSource(file string, src []byte) (entries []Entry, pkg string, err 
 					recv = baseTypeName(ty.Text(src))
 				}
 				walk(c, recv)
+			case isValueNode(t):
+				// package-level consts/vars — function bodies are never
+				// entered, so anything seen here is a top-level value
+				emitValueSpecs(c, valueKind(t), emitValue, lang)
 			default:
 				walk(c, enclosing) // namespaces, exports, statements — transparent
 			}
@@ -109,6 +129,40 @@ func declsFromSource(file string, src []byte) (entries []Entry, pkg string, err 
 // (function_type, call_expression, …).
 func isFuncNode(t string) bool {
 	return containsAny(t, "function", "method", "constructor", "subroutine", "procedure")
+}
+
+// isValueNode matches a top-level constant/variable declaration across
+// grammars: Go var/const declarations, JS/TS lexical declarations, Rust
+// const/static items. Field declarations are deliberately not matched —
+// fields travel with their type's source.
+func isValueNode(t string) bool {
+	return containsAny(t, "var_declaration", "const_declaration", "variable_declaration",
+		"lexical_declaration", "const_item", "static_item")
+}
+
+// valueKind names a value declaration's kind from its node type.
+func valueKind(t string) string {
+	if strings.Contains(t, "const") {
+		return "const"
+	}
+	return "var"
+}
+
+// emitValueSpecs emits each name a value declaration introduces. A declaration
+// either carries a name field itself (Rust const_item) or wraps spec/declarator
+// children that do (Go var_spec/const_spec, JS variable_declarator) — including
+// grouped forms like `const ( A = 1; B = 2 )`.
+func emitValueSpecs(node *ts.Node, kind string, emit func(*ts.Node, string), lang *ts.Language) {
+	if node.ChildByFieldName("name", lang) != nil {
+		emit(node, kind)
+		return
+	}
+	for i := 0; i < node.NamedChildCount(); i++ {
+		c := node.NamedChild(i)
+		if c.ChildByFieldName("name", lang) != nil {
+			emit(c, kind)
+		}
+	}
 }
 
 // isTypeNode matches a type/class/struct/enum/… definition node across grammars.

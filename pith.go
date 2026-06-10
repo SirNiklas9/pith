@@ -166,7 +166,10 @@ func renderDir(w io.Writer, dir string, files []string, byFile map[string][]Entr
 	}
 }
 
-const funcsKey = "\x00funcs"
+const (
+	funcsKey  = "\x00funcs"
+	valuesKey = "\x00values"
+)
 
 // renderGroups prints declarations grouped by type (each type with its
 // methods), free functions last, blank line between groups.
@@ -193,6 +196,9 @@ func renderGroups(w io.Writer, entries []Entry) {
 		case "method":
 			g := get(recvBase(e.Recv), e.Line)
 			g.rows = append(g.rows, e)
+		case "var", "const":
+			g := get(valuesKey, e.Line)
+			g.rows = append(g.rows, e)
 		default:
 			g := get(funcsKey, e.Line)
 			g.rows = append(g.rows, e)
@@ -214,6 +220,8 @@ func renderGroups(w io.Writer, entries []Entry) {
 		switch {
 		case key == funcsKey:
 			fmt.Fprintln(w, "functions")
+		case key == valuesKey:
+			fmt.Fprintln(w, "values")
 		case g.typ != nil:
 			fmt.Fprintf(w, "type %s — %s\n", g.typ.Name, orUndoc(g.typ.What))
 		default:

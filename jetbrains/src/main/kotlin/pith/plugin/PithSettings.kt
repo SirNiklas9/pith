@@ -18,7 +18,11 @@ class PithSettings : PersistentStateComponent<PithSettings.State> {
         // "agent" = pass --agent <agentCommand>; "api" = pass --api/--model.
         var backendMode: String = "agent",
         var apiTarget: String = "openrouter",
-        var apiModel: String = "openai/gpt-4o-mini"
+        var apiModel: String = "openai/gpt-4o-mini",
+        // Show the dry-run preview (context resolved + token estimate) with a
+        // Send/Cancel gate before every AI edit. The preview dialog's
+        // "don't ask again" checkbox flips this off.
+        var previewBeforeSend: Boolean = true
     )
 
     private var myState = State()

@@ -53,6 +53,9 @@ class PithPromptDialog(
     companion object {
         val EDIT_CONTEXTS = linkedMapOf(
             "None — just the selection" to "",
+            "Uses — what the selection references (outlines, this folder)" to "uses:dir",
+            "Uses full — their implementations" to "uses:dir:full",
+            "Uses deep — follow the chain 3 hops (implementations)" to "uses:dir:3:full",
             "Around — this file's outline" to "around",
             "File — this file's full source" to "file",
             "Dir — folder outline" to "dir",

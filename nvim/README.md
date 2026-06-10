@@ -74,8 +74,10 @@ require("pith").setup({
   border       = "rounded",   -- float border style
   backend_args = {},          -- extra args for AI ops, e.g. {"--agent", "claude -p"}
   agent        = false,       -- set true when using --agent (edits files directly)
-  context      = nil,         -- nil = none, "ask" = pick per edit/generate,
-                              -- or a fixed level: "around"|"file"|"dir"|"project"
+  context      = nil,         -- nil = none, "ask" = pick per edit/generate, or a fixed
+                              -- level: "uses:dir" (decls the selection references) /
+                              -- "uses:dir:full" (their implementations) /
+                              -- "around"|"file"|"dir"|"project"
 })
 ```
 
