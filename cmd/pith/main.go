@@ -105,7 +105,8 @@ func main() {
 		"  pith edit     <file> --range A:B --prompt \"...\" --cmd \"<llm>\" [--apply|--raw] [--context around|file|dir|project|uses[:dir|:project][:N|:all][:full|:fullN]]\n" +
 		"  pith generate <newfile> --prompt \"...\" --cmd \"<llm>\" [--apply] [--context file|dir|project]\n" +
 		"  pith work     [add \"<note>\" [--at file:line] | done <id> | rm <id> | clear | --all]\n" +
-		"  pith config   [set <name> <value> | unset <name> | path]   set-and-forget backend + API keys"
+		"  pith config   [set <name> <value> | unset <name> | path]   set-and-forget backend + API keys\n" +
+		"  pith price    [model]    fetch + cache current rates so --dry-run shows cost (offline after)"
 	if len(pos) == 0 {
 		die(usage)
 	}
@@ -115,6 +116,27 @@ func main() {
 	}
 	if pos[0] == "config" {
 		configCmd(pos[1:])
+		return
+	}
+	if pos[0] == "price" {
+		model := backend.Model
+		if len(pos) >= 2 {
+			model = pos[1]
+		}
+		if model == "" {
+			if cfg, err := pith.LoadConfig(); err == nil {
+				model = cfg.Model
+			}
+		}
+		if model == "" {
+			die("pith price needs a model, e.g. pith price anthropic/claude-haiku-4.5")
+		}
+		p, err := pith.FetchPrice(model)
+		if err != nil {
+			die("pith:", err)
+		}
+		fmt.Printf("%s\n  input   $%.2f /M tokens\n  output  $%.2f /M tokens\nCached — dry-run previews now show cost, offline.\n",
+			model, p.In*1e6, p.Out*1e6)
 		return
 	}
 	if pos[0] == "map" {
@@ -274,7 +296,7 @@ func editCmd(file, rangeArg, prompt string, backend pith.Backend, apply, raw boo
 		}
 		printDryRun(fmt.Sprintf("edit %s %d:%d", file, a, b), ctxLevel, file, a, b,
 			[][2]any{{fmt.Sprintf("region (lines %d:%d)", a, b), len(region)}, {"context", len(context)}, {"instruction", len(prompt)}},
-			full, raw)
+			full, raw, dryRunModel(backend))
 		return
 	}
 
@@ -334,7 +356,7 @@ func generateCmd(file, prompt string, backend pith.Backend, apply, raw bool, ctx
 			full = pith.AgentGenerateTask(file, prompt, context)
 		}
 		printDryRun("generate "+file, ctxLevel, file, 0, 0,
-			[][2]any{{"context", len(context)}, {"instruction", len(prompt)}}, full, raw)
+			[][2]any{{"context", len(context)}, {"instruction", len(prompt)}}, full, raw, dryRunModel(backend))
 		return
 	}
 
@@ -546,7 +568,7 @@ func parseAt(s string) (file string, line int) {
 // printDryRun renders the deterministic preview of an AI op: the uses hop
 // tree (when the context level is relational), a byte/~token budget per prompt
 // part, and — with --raw — the exact prompt. Offline, keyless, free.
-func printDryRun(op, ctxLevel, file string, a, b int, parts [][2]any, full string, raw bool) {
+func printDryRun(op, ctxLevel, file string, a, b int, parts [][2]any, full string, raw bool, model string) {
 	fmt.Printf("DRY RUN  pith %s  (nothing sent — offline, keyless)\n\n", op)
 
 	if strings.HasPrefix(ctxLevel, "uses") {
@@ -574,12 +596,32 @@ func printDryRun(op, ctxLevel, file string, a, b int, parts [][2]any, full strin
 	lo, hi := pith.EstimateTokensRange(len(full))
 	fmt.Printf("  %-28s %7d   %d–%d\n", "TOTAL", len(full), lo, hi)
 	fmt.Println("\n~tokens = bytes/4 per part; the total is a range covering all mainstream tokenizers")
+	if model != "" {
+		if p, ok := pith.CachedPrice(model); ok {
+			fmt.Printf("est. input cost  %s–%s   (%s @ $%.2f/M in, $%.2f/M out — output billed on the reply)\n",
+				pith.Dollars(float64(lo)*p.In), pith.Dollars(float64(hi)*p.In), model, p.In*1e6, p.Out*1e6)
+		} else {
+			fmt.Printf("pricing: not cached — run `pith price %s` once and previews show cost offline\n", model)
+		}
+	}
 	if raw {
 		fmt.Println("\n--- exact prompt ---")
 		fmt.Println(full)
 	} else {
 		fmt.Println("(add --raw to print the exact prompt)")
 	}
+}
+
+// dryRunModel names the model a dry run would bill against: an explicit
+// --model wins (API mode), else the stored config default.
+func dryRunModel(backend pith.Backend) string {
+	if backend.Model != "" {
+		return backend.Model
+	}
+	if cfg, err := pith.LoadConfig(); err == nil && cfg.Model != "" {
+		return cfg.Model
+	}
+	return ""
 }
 
 // renderDiff prints the old region (-) vs the proposed new region (+).

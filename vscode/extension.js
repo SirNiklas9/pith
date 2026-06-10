@@ -229,7 +229,7 @@ async function cmdEdit() {
   // the token estimate) with a Send/Cancel modal. "Always send directly"
   // flips the pith.preview setting off globally.
   if (vscode.workspace.getConfiguration("pith").get("preview", true)) {
-    const dry = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, ...ctx, "--dry-run"]);
+    const dry = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, ...ctx, ...backendArgs(), "--dry-run"]);
     if (dry.code !== 0) return fail(dry, "preview");
     const choice = await vscode.window.showInformationMessage(
       "pith — preview before send", { modal: true, detail: dry.stdout },
