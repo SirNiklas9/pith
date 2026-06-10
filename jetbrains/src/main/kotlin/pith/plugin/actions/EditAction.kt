@@ -32,7 +32,11 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
             project, "Edit instruction (lines $start–$end):", "pith edit", null
         ) ?: return
 
-        FileDocumentManager.getInstance().saveDocument(doc)
+        // Save EVERYTHING, not just this document: an agent backend has latitude
+        // to touch files beyond the selection, and an externally-rewritten file
+        // only reloads silently when its document has no unsaved changes —
+        // otherwise the IDE raises the File Cache Conflict dialog.
+        FileDocumentManager.getInstance().saveAllDocuments()
 
         // --raw, not --apply: a completion backend prints the new region to
         // stdout and never touches the file, so the plugin can splice it into
@@ -58,8 +62,16 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
         val rawBuf  = StringBuilder()
 
         // AGENT path: the agent wrote the file on disk — inject its content into
-        // the document (inside a command so undo works) and save immediately so
-        // memory and disk agree before the IDE's file watcher looks.
+        // the document (inside a command so undo works).
+        //
+        // The File Cache Conflict dialog fires on modification stamps alone;
+        // the platform never compares content (MemoryDiskConflictResolver). So
+        // the moment our setText marks the document unsaved, a VFS refresh of
+        // the agent's disk write raises the dialog even though memory == disk.
+        // Sequence that makes the trigger unreachable: write the bytes VFS
+        // believes in back to disk, sync-refresh while the document is still
+        // clean (identical content + clean doc = always silent), THEN do the
+        // undoable setText and save onto a no-longer-stale file.
         fun applyFromDisk(): Boolean {
             val mtime = try {
                 Files.getLastModifiedTime(filePath).toMillis()
@@ -70,13 +82,23 @@ class EditAction : PithAction("Edit Selection...", "AI edit of the selected regi
                 Thread.sleep(80) // let the write flush
                 val newContent = Files.readString(filePath).replace("\r\n", "\n").replace("\r", "\n")
                 ApplicationManager.getApplication().invokeLater {
-                    ApplicationManager.getApplication().runWriteAction {
-                        CommandProcessor.getInstance().executeCommand(project, {
-                            if (doc.text != newContent) doc.setText(newContent)
-                        }, "pith edit", null)
-                        FileDocumentManager.getInstance().saveDocument(doc)
+                    try {
+                        if (!FileDocumentManager.getInstance().isDocumentUnsaved(doc)) {
+                            Files.write(filePath, vFile.contentsToByteArray())
+                            vFile.refresh(false, false)
+                        }
+                        // (document unsaved here = the user typed mid-run; the
+                        // conflict is then genuine and the dialog is correct)
+                        ApplicationManager.getApplication().runWriteAction {
+                            CommandProcessor.getInstance().executeCommand(project, {
+                                if (doc.text != newContent) doc.setText(newContent)
+                            }, "pith edit", null)
+                            FileDocumentManager.getInstance().saveDocument(doc)
+                        }
+                        PithToolWindowFactory.print(project, "\n[pith] applied — Ctrl+Z to undo\n")
+                    } catch (ex: Exception) {
+                        PithToolWindowFactory.print(project, "\n[pith] reload failed: ${ex.message}\n", true)
                     }
-                    PithToolWindowFactory.print(project, "\n[pith] applied — Ctrl+Z to undo\n")
                 }
             } catch (ex: Exception) {
                 PithToolWindowFactory.print(project, "\n[pith] reload failed: ${ex.message}\n", true)

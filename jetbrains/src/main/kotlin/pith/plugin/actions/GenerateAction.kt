@@ -1,6 +1,7 @@
 package pith.plugin.actions
 
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -22,6 +23,10 @@ class GenerateAction : PithAction("Generate File...", "Generate a new file from 
         ) ?: return
 
         val fullPath = "$basePath/$relPath"
+
+        // Agent backends may edit existing files while generating; unsaved
+        // documents they touch would trigger the File Cache Conflict dialog.
+        FileDocumentManager.getInstance().saveAllDocuments()
 
         runPith(e, listOf("generate", fullPath, "--prompt", prompt, "--apply") + backend) {
             // Refresh VFS then open the new file — the Runnable fires after refresh completes

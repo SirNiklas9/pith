@@ -178,8 +178,9 @@ async function cmdEdit() {
   const file = editor.document.fileName;
   await withProgress("editing…", async () => {
     if (agentMode()) {
-      // The agent edits the file on disk itself; VS Code reloads clean docs.
-      if (editor.document.isDirty) await editor.document.save();
+      // The agent edits files on disk itself (it may touch more than the
+      // selection); VS Code only reloads clean docs, so save everything.
+      await vscode.workspace.saveAll(false);
       const res = await runPith(["edit", file, "--range", `${start}:${end}`, "--prompt", prompt, ...backendArgs()]);
       if (res.code !== 0) return fail(res, "edit");
       vscode.window.showInformationMessage("pith: edit applied (agent wrote the file)");
