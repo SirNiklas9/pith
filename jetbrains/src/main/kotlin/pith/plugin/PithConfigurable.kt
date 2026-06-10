@@ -26,7 +26,8 @@ class PithConfigurable : Configurable {
     override fun getDisplayName() = "pith"
 
     override fun createComponent(): JComponent = FormBuilder.createFormBuilder()
-        .addLabeledComponent(JBLabel("pith binary path:"), binaryField)
+        .addLabeledComponent(JBLabel("pith binary path (empty = bundled):"), binaryField)
+        .addComponentToRightColumn(JBLabel("Empty uses the ${PithBinary.bundledHint()}."))
         .addLabeledComponent(JBLabel("AI backend:"), modeBox)
         .addLabeledComponent(JBLabel("Agent command:"), agentField)
         .addLabeledComponent(JBLabel("API (preset or URL):"), apiField)

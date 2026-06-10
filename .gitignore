@@ -8,5 +8,10 @@
 jetbrains/.gradle/
 jetbrains/build/
 
+# vscode extension build artifacts (binaries staged at package time)
+vscode/bin/
+vscode/node_modules/
+vscode/*.vsix
+
 # release staging
 /release/

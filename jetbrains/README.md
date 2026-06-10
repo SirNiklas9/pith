@@ -10,13 +10,16 @@ pith core doesn't change. The plugin is just a UI shell that calls the binary.
 
 **Prebuilt**: download `pith-jetbrains-<version>.zip` from **[Releases](https://github.com/SirNiklas9/pith/releases)** and install via **Settings ▸ Plugins ▸ ⚙ ▸ Install Plugin from Disk**. Works in any JetBrains IDE on 2024.1+ — Rider, GoLand, IntelliJ, PyCharm, all of them.
 
+**The pith binary is bundled inside the plugin** (all platforms in release builds) and extracted on first use — no PATH setup, nothing else to install. Settings can still point at your own binary if you prefer.
+
 ## Build from source
 
-You need JDK 17+ and Gradle.
+You need JDK 17+, Gradle, and Go (the build compiles the pith binary into the plugin).
 
 ```
 cd jetbrains
-./gradlew clean buildPlugin
+./gradlew clean buildPlugin                          # bundles your platform's binary
+./gradlew clean buildPlugin "-PbundlePlatforms=all"  # bundles all six (release builds)
 ```
 
 The `.zip` lands in `build/distributions/`. Always `clean` — incremental builds can package stale class files.
@@ -35,7 +38,7 @@ Or run in a sandboxed IDE for development:
 
 | Setting | Default | What it does |
 |---|---|---|
-| pith binary path | `pith` | Full path to pith.exe, or just `pith` if it's on your PATH |
+| pith binary path | *(empty)* | Empty = the binary bundled with the plugin. Set a path to use your own build instead |
 | Default agent command | `claude --dangerously-skip-permissions -p` | The AI backend used for explain, summary, edit, generate |
 
 You can swap the agent for any pith-compatible backend:

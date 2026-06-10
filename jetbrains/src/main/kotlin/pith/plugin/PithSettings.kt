@@ -11,7 +11,8 @@ import com.intellij.openapi.components.Storage
 class PithSettings : PersistentStateComponent<PithSettings.State> {
 
     data class State(
-        var pithBinary: String = "pith",
+        // Blank = use the binary bundled inside the plugin (PithBinary).
+        var pithBinary: String = "",
         var agentCommand: String = "claude --dangerously-skip-permissions -p",
         // "config" = pass no backend flags, pith's own stored config decides;
         // "agent" = pass --agent <agentCommand>; "api" = pass --api/--model.

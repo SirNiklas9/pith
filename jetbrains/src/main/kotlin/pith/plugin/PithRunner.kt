@@ -21,7 +21,7 @@ object PithRunner {
         onOutput: (text: String, isStdout: Boolean) -> Unit,
         onDone: () -> Unit
     ) {
-        val binary = PithSettings.getInstance().state.pithBinary
+        val binary = PithBinary.resolve()
 
         val cmd = GeneralCommandLine()
             .withExePath(binary)

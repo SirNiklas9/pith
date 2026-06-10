@@ -1,0 +1,71 @@
+{
+  "name": "pith",
+  "displayName": "pith",
+  "description": "The pith of your code. Read, search, explain, and edit any codebase via the bundled pith CLI.",
+  "version": "0.4.0",
+  "publisher": "SirNiklas9",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/SirNiklas9/pith" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "pith.read",        "title": "pith: Read File" },
+      { "command": "pith.readFolder",  "title": "pith: Read Folder" },
+      { "command": "pith.search",      "title": "pith: Search…" },
+      { "command": "pith.summary",     "title": "pith: Summary" },
+      { "command": "pith.explain",     "title": "pith: Explain at Cursor" },
+      { "command": "pith.edit",        "title": "pith: Edit Selection…" },
+      { "command": "pith.generate",    "title": "pith: Generate File…" },
+      { "command": "pith.workList",    "title": "pith: Work List" },
+      { "command": "pith.workAdd",     "title": "pith: Work Add at Cursor" }
+    ],
+    "keybindings": [
+      { "command": "pith.read",       "key": "ctrl+alt+o",       "when": "editorTextFocus" },
+      { "command": "pith.readFolder", "key": "ctrl+alt+shift+o", "when": "editorTextFocus" },
+      { "command": "pith.search",     "key": "ctrl+alt+f" },
+      { "command": "pith.summary",    "key": "ctrl+alt+s",       "when": "editorTextFocus" },
+      { "command": "pith.explain",    "key": "ctrl+alt+x",       "when": "editorTextFocus" },
+      { "command": "pith.edit",       "key": "ctrl+alt+e",       "when": "editorHasSelection" },
+      { "command": "pith.generate",   "key": "ctrl+alt+g" },
+      { "command": "pith.workList",   "key": "ctrl+alt+w" }
+    ],
+    "configuration": {
+      "title": "pith",
+      "properties": {
+        "pith.binaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the pith binary. Leave empty to use the binary bundled with the extension (falls back to pith on PATH)."
+        },
+        "pith.backendMode": {
+          "type": "string",
+          "enum": ["config", "agent", "api"],
+          "enumDescriptions": [
+            "Pass no backend flags — pith's own stored config (pith config) decides.",
+            "Agent CLI (claude, codex) — edits files itself.",
+            "OpenAI-compatible API (OpenRouter, OpenAI, Ollama) — fast surgical splice."
+          ],
+          "default": "config",
+          "description": "Which AI backend the AI commands use."
+        },
+        "pith.agentCommand": {
+          "type": "string",
+          "default": "claude --dangerously-skip-permissions -p",
+          "description": "Agent command used when backend mode is 'agent'."
+        },
+        "pith.apiTarget": {
+          "type": "string",
+          "default": "openrouter",
+          "description": "API preset (openai, openrouter, ollama) or a custom /chat/completions URL, used when backend mode is 'api'."
+        },
+        "pith.apiModel": {
+          "type": "string",
+          "default": "anthropic/claude-haiku-4.5",
+          "description": "Model name used when backend mode is 'api'."
+        }
+      }
+    }
+  }
+}

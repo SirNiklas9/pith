@@ -1,11 +1,13 @@
 -- pith.nvim — purpose-map, AI summary, edit, explain, search, work-tracker.
 --
+-- The binary is found automatically: repo checkout → plugin bin/ → a release
+-- binary downloaded on first use → pith on PATH. `bin` in setup() overrides.
+--
 -- Setup (lazy.nvim, local dir):
 --   {
 --     dir = "path/to/pith/nvim",
 --     config = function()
 --       require("pith").setup({
---         bin          = "/path/to/pith",          -- or just "pith" if on $PATH
 --         backend_args = { "--agent", "claude --dangerously-skip-permissions -p" },
 --         agent        = true,
 --       })
@@ -23,8 +25,11 @@
 
 local M = {}
 
+-- Pinned pith release this plugin auto-downloads when no binary is found.
+M.version = "0.4.0"
+
 local config = {
-  bin          = "pith",
+  bin          = nil,   -- explicit binary path; nil = resolve automatically
   backend_args = {},    -- { "--agent", "claude --dangerously-skip-permissions -p" }
   agent        = false, -- true when backend edits files itself (edit reloads buffer)
   width        = 0.7,
@@ -35,6 +40,94 @@ local config = {
 function M.setup(opts)
   config = vim.tbl_deep_extend("force", config, opts or {})
 end
+
+-- ─── binary resolution ──────────────────────────────────────────────────────
+-- Order: setup({bin=...}) → repo-checkout binary (plugin lives in pith/nvim)
+-- → bin/ inside the plugin → previously downloaded release → pith on PATH.
+-- Nothing found → kick off an async download of the pinned release.
+
+local uv = vim.uv or vim.loop
+
+local function platform()
+  local u = uv.os_uname()
+  local sys = u.sysname:lower()
+  local os_ = sys:find("windows") and "windows" or (sys:find("darwin") and "darwin" or "linux")
+  local m = (u.machine or ""):lower()
+  local arch = (m:find("aarch") or m:find("arm")) and "arm64" or "amd64"
+  return os_, arch
+end
+
+local function exists(p) return p and uv.fs_stat(p) ~= nil end
+
+local function plugin_root()
+  local src = debug.getinfo(1, "S").source:sub(2)
+  return vim.fs.normalize(src):gsub("/lua/pith/init%.lua$", "")
+end
+
+local function download_target()
+  local os_ = platform()
+  local ext = os_ == "windows" and ".exe" or ""
+  return vim.fn.stdpath("data") .. "/pith/" .. M.version .. "/pith" .. ext
+end
+
+local resolved
+local function resolve_bin()
+  if config.bin then return config.bin end
+  if resolved then return resolved end
+  local os_, arch = platform()
+  local ext = os_ == "windows" and ".exe" or ""
+  local root = plugin_root()
+  local candidates = {
+    root:gsub("/nvim$", "") .. "/pith" .. ext,                    -- repo checkout
+    ("%s/bin/pith-%s-%s%s"):format(root, os_, arch, ext),         -- bundled drop-in
+    download_target(),                                            -- downloaded release
+  }
+  for _, p in ipairs(candidates) do
+    if exists(p) then
+      resolved = p
+      return resolved
+    end
+  end
+  if vim.fn.executable("pith") == 1 then
+    resolved = "pith"
+    return resolved
+  end
+  return nil
+end
+
+local downloading = false
+-- Downloads the pinned release binary into stdpath("data"). Safe to call
+-- any time (also via lazy.nvim's build hook: ":lua require('pith').install()").
+function M.install(on_done)
+  if downloading then return end
+  downloading = true
+  local os_, arch = platform()
+  local ext = os_ == "windows" and ".exe" or ""
+  local asset = ("pith-%s-%s%s"):format(os_, arch, ext)
+  local url = ("https://github.com/SirNiklas9/pith/releases/download/v%s/%s"):format(M.version, asset)
+  local target = download_target()
+  vim.fn.mkdir(vim.fn.fnamemodify(target, ":h"), "p")
+  vim.notify("pith: downloading " .. asset .. " v" .. M.version .. "…")
+  vim.system({ "curl", "-fsSL", "-o", target, url }, {}, function(res)
+    vim.schedule(function()
+      downloading = false
+      if res.code ~= 0 then
+        vim.notify(
+          "pith: download failed — build it (go build -o pith ./cmd/pith), put it on PATH, or set bin in setup()",
+          vim.log.levels.ERROR
+        )
+        return
+      end
+      if os_ ~= "windows" then uv.fs_chmod(target, 493) end -- 0755
+      resolved = target
+      vim.notify("pith: installed " .. target)
+      if on_done then on_done() end
+    end)
+  end)
+end
+
+-- Which binary the plugin would run right now (nil = none yet).
+function M.which() return resolve_bin() end
 
 -- ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -51,7 +144,12 @@ end
 
 -- synchronous run, returns lines-list or nil+err
 local function run_sync(args)
-  local cmd = vim.list_extend({ config.bin }, args)
+  local bin = resolve_bin()
+  if not bin then
+    M.install()
+    return nil, "pith binary not found — downloading it now, retry in a moment"
+  end
+  local cmd = vim.list_extend({ bin }, args)
   local out  = vim.fn.systemlist(cmd)
   if vim.v.shell_error ~= 0 then
     return nil, table.concat(out, "\n")
@@ -59,9 +157,15 @@ local function run_sync(args)
   return out
 end
 
--- asynchronous run (Neovim 0.10+), calls on_done(stdout|nil, err|nil)
+-- asynchronous run (Neovim 0.10+), calls on_done(stdout|nil, err|nil);
+-- no binary yet → download it, then run.
 local function run_async(args, on_done)
-  local cmd = vim.list_extend({ config.bin }, args)
+  local bin = resolve_bin()
+  if not bin then
+    M.install(function() run_async(args, on_done) end)
+    return
+  end
+  local cmd = vim.list_extend({ bin }, args)
   vim.system(cmd, { text = true }, function(res)
     vim.schedule(function()
       if res.code ~= 0 then
@@ -292,7 +396,13 @@ function M.work_add()
     if file ~= "" then
       vim.list_extend(args, { "--at", file .. ":" .. lnum })
     end
-    vim.fn.system(vim.list_extend({ config.bin }, args))
+    local bin = resolve_bin()
+    if not bin then
+      M.install()
+      vim.notify("pith: binary not found — downloading, retry shortly", vim.log.levels.WARN)
+      return
+    end
+    vim.fn.system(vim.list_extend({ bin }, args))
     if vim.v.shell_error == 0 then
       vim.notify("pith: work item added", vim.log.levels.INFO)
     else

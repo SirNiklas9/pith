@@ -1,66 +1,51 @@
-# pith in VS Code
+# pith VS Code Extension
 
-VS Code runs pith through **Tasks** — the built-in task runner that can prompt for free text, which means `edit`, `generate`, and `explain` all work properly here.
+A real VS Code extension that wraps the pith CLI. The binary is **bundled inside the extension** — install the `.vsix` and everything works, no PATH setup, no config files to copy.
+
+pith core doesn't change. The extension is just a UI shell that calls the binary.
 
 ---
 
-## Setup
+## Install
 
-**1. Copy `tasks.json` into your project**
+**Prebuilt**: download `pith-vscode-<version>.vsix` from **[Releases](https://github.com/SirNiklas9/pith/releases)**, then in VS Code: `Ctrl+Shift+P` → **Extensions: Install from VSIX…**
+
+**From source** (needs Node + Go):
 
 ```
-.vscode/
-  tasks.json     ← copy vscode/tasks.json here
+cd vscode
+go build -ldflags "-s -w" -o bin/pith-windows-amd64.exe ../cmd/pith   # your platform's name: pith-<goos>-<goarch>[.exe]
+npx --yes @vscode/vsce package
 ```
-
-Either copy it once into a specific project's `.vscode/` folder, or into a global tasks file if you want it everywhere.
-
-**2. Add keybindings (optional)**
-
-Copy the contents of `keybindings.json` into your VS Code keybindings:
-
-- `Ctrl+Shift+P` → **Open Keyboard Shortcuts (JSON)**
-- Paste the entries from `keybindings.json`
-
-**3. Point at your binary**
-
-In `tasks.json`, `"command": "pith"` assumes `pith` is on your PATH. If it's not, replace with the full path: `"C:\\path\\to\\pith.exe"`.
-
-Also update the `--agent` strings to match your preferred AI tool.
 
 ---
 
 ## Keys
 
-| Shortcut | What it does |
+| Shortcut | Command |
 |---|---|
-| `Ctrl+Alt+O` | Read the current file (clickable output in Problems panel) |
+| `Ctrl+Alt+O` | Read the current file (QuickPick — Enter jumps to the declaration) |
 | `Ctrl+Alt+Shift+O` | Read the current folder |
-| `Ctrl+Alt+F` | Search — prompts for a query |
-| `Ctrl+Alt+S` | AI summary of the current file |
-| `Ctrl+Alt+X` | AI explain — uses current line position |
-| `Ctrl+Alt+E` | AI edit — prompts for line range and instruction |
-| `Ctrl+Alt+W` | Work list |
+| `Ctrl+Alt+F` | Search the workspace — prompts for a query, results jump on Enter |
+| `Ctrl+Alt+S` | AI summary of the current file (opens beside the editor) |
+| `Ctrl+Alt+X` | AI explain the declaration at the cursor |
+| `Ctrl+Alt+E` | AI edit the selection — prompts for an instruction |
+| `Ctrl+Alt+G` | Generate a new file from a prompt |
+| `Ctrl+Alt+W` | Work list (anchored items jump on Enter) |
 
-Or run any task manually: `Ctrl+Shift+P` → **Tasks: Run Task** → pick from the list.
-
----
-
-## How edit works here
-
-VS Code tasks can prompt for free text (`promptString` inputs), so you type the line range and instruction inline:
-
-1. `Ctrl+Alt+E`
-2. VS Code asks: **Line range to edit?** → type `10:30`
-3. VS Code asks: **Edit instruction?** → type your prompt
-4. pith runs, the file is rewritten
-
-For `generate`, the task prompts for a file path and what to generate.
-
-For `explain`, use `Ctrl+Alt+X` (explain at current line) or run **pith: explain by name** from Tasks to name a specific declaration.
+All commands are also in the palette under **pith:**, including **Work Add at Cursor**.
 
 ---
 
-## Clickable output
+## Settings
 
-`read` and `search` use the `problemMatcher` pattern so results appear in the **Problems panel** (`Ctrl+Shift+M`) as clickable links that jump to the declaration. The Terminal also shows the raw output.
+`File ▸ Preferences ▸ Settings ▸ pith` — same knobs as the JetBrains plugin:
+
+- **Binary Path** — leave empty to use the bundled binary (falls back to `pith` on PATH).
+- **Backend Mode** — `config` (recommended: pith's own `pith config` store decides), `agent`, or `api`.
+- **Agent Command / Api Target / Api Model** — used by the respective modes.
+
+## How edit applies
+
+- **API / config backend**: pith prints the new region (`--raw`), the extension splices it into the buffer. No disk writes, native undo.
+- **Agent backend**: the agent edits the file on disk itself (it has latitude — review with git). Your buffer is saved first; VS Code reloads the file automatically.

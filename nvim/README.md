@@ -8,22 +8,23 @@ Works on any language (Go, Python, TypeScript, C#, Rust, C, C++, and 200 more).
 
 ## Install
 
-**1. Build the binary**
+No binary setup needed — the plugin finds pith automatically, in this order:
 
-```
-cd /path/to/pith
-go build -o pith ./cmd/pith        # Linux / macOS
-go build -o pith.exe ./cmd/pith    # Windows
-```
+1. `bin` set explicitly in `setup()`
+2. a binary built at the repo root (when the plugin runs from a pith checkout)
+3. `bin/pith-<os>-<arch>` inside the plugin folder (drop one in by hand if you like)
+4. a release binary the plugin **downloads itself** on first use (pinned to the plugin version, stored under `stdpath("data")/pith/`)
+5. `pith` on PATH
 
-**2. Add to your lazy.nvim config**
+`:lua print(require("pith").which())` shows what it resolved; `:lua require("pith").install()` forces the download (usable as a lazy.nvim `build` hook).
+
+**Add to your lazy.nvim config**
 
 ```lua
 {
-  dir = "/path/to/pith/nvim",
+  dir = "/path/to/pith/nvim",  -- or your plugin manager's GitHub spec
   config = function()
     require("pith").setup({
-      bin          = "/path/to/pith",
       backend_args = { "--agent", "claude --dangerously-skip-permissions -p" },
       agent        = true,
     })
@@ -66,7 +67,7 @@ Requires Neovim 0.10+ (uses `vim.system` for async).
 
 ```lua
 require("pith").setup({
-  bin          = "pith",      -- path to pith binary (or just "pith" if on PATH)
+  bin          = nil,         -- explicit binary path; nil = resolve automatically
   width        = 0.7,         -- float width (fraction of editor width)
   height       = 0.7,         -- float height (fraction of editor height)
   border       = "rounded",   -- float border style
