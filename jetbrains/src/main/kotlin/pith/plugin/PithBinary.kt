@@ -68,14 +68,23 @@ object PithBinary {
         val (goos, goarch) = hostPlatform()
         val ext = if (goos == "windows") ".exe" else ""
         val target = Path.of(PathManager.getSystemPath(), "pith", pluginVersion(), "pith$ext")
-        if (Files.isRegularFile(target)) return target.toString()
 
-        val stream = javaClass.getResourceAsStream(resourceName(goos, goarch)) ?: return null
+        val stream = javaClass.getResourceAsStream(resourceName(goos, goarch))
+            ?: return if (Files.isRegularFile(target)) target.toString() else null
+        val bytes = stream.use { it.readBytes() }
+
+        // Same version number does not mean same binary — a refreshed plugin
+        // zip can carry a newer build under the same version. Re-extract
+        // whenever the bundled bytes differ in size from what's on disk.
+        if (Files.isRegularFile(target) && Files.size(target) == bytes.size.toLong()) {
+            return target.toString()
+        }
+
         Files.createDirectories(target.parent)
         val tmp = Files.createTempFile(target.parent, "pith", ".tmp")
-        stream.use { input -> Files.copy(input, tmp, StandardCopyOption.REPLACE_EXISTING) }
+        Files.write(tmp, bytes)
         try {
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE)
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } catch (e: Exception) {
             // lost a race with another extraction; whatever landed there wins
             Files.deleteIfExists(tmp)
