@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // NoBackendMsg explains the backends a user can choose. pith never picks a paid
@@ -359,6 +360,18 @@ func resolveAPI(api string) (base, keyEnv string) {
 	}
 }
 
+// apiClient returns an http.Client with a timeout sourced from the
+// PITH_API_TIMEOUT environment variable (seconds), defaulting to 60s.
+func apiClient() *http.Client {
+	timeout := 60 * time.Second
+	if v := os.Getenv("PITH_API_TIMEOUT"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+			timeout = time.Duration(secs) * time.Second
+		}
+	}
+	return &http.Client{Timeout: timeout}
+}
+
 // runAPI calls an OpenAI-compatible /chat/completions endpoint and returns the
 // message content.
 func runAPI(base, model, key, prompt string) (string, error) {
@@ -378,7 +391,7 @@ func runAPI(base, model, key, prompt string) (string, error) {
 	if key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := apiClient().Do(req)
 	if err != nil {
 		return "", err
 	}

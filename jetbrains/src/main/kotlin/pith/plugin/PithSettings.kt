@@ -16,7 +16,7 @@ class PithSettings : PersistentStateComponent<PithSettings.State> {
         var agentCommand: String = "claude --dangerously-skip-permissions -p",
         // "config" = pass no backend flags, pith's own stored config decides;
         // "agent" = pass --agent <agentCommand>; "api" = pass --api/--model.
-        var backendMode: String = "agent",
+        var backendMode: String = "config",
         var apiTarget: String = "openrouter",
         var apiModel: String = "openai/gpt-4o-mini",
         // Show the dry-run preview (context resolved + token estimate) with a
