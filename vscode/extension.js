@@ -257,6 +257,7 @@ async function cmdEdit() {
     const range = new vscode.Range(start - 1, 0, end - 1, editor.document.lineAt(end - 1).text.length);
     const text = res.stdout.replace(/\r?\n$/, "");
     await editor.edit((b) => b.replace(range, text));
+    await editor.document.save();
     vscode.window.showInformationMessage("pith: edit applied (Ctrl+Z to undo)");
   });
 }
@@ -281,7 +282,10 @@ async function cmdGenerate() {
 async function cmdWorkList() {
   const res = await runPith(["work"]);
   if (res.code !== 0) return fail(res, "work");
-  await pickAndJump(res.stdout.split("\n"), "work");
+  // Strip the "[x] #N   " work-list prefix so pickAndJump receives grep-format
+  // "file:line: note" lines it can parse into jump targets.
+  const lines = res.stdout.split("\n").map(l => l.replace(/^\[[^\]]*\]\s+#\d+\s+/, ""));
+  await pickAndJump(lines, "work");
 }
 
 // Write-through key entry: handed once to `pith config set` (pith's own
