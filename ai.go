@@ -233,7 +233,11 @@ func SummaryPrompt(isDir bool, pkg string, all []Entry) string {
 func EditPrompt(file, region, instruction, context string) string {
 	var b strings.Builder
 	b.WriteString("You are a code-transformation function, NOT an assistant.\n")
-	fmt.Fprintf(&b, "Apply the instruction to the %s region below and output ONLY the replacement code.\n", LangOf(file))
+	if lang := LangOf(file); lang != "" {
+		fmt.Fprintf(&b, "Apply the instruction to the %s region below and output ONLY the replacement code.\n", lang)
+	} else {
+		b.WriteString("Apply the instruction to the region below and output ONLY the replacement code.\n")
+	}
 	b.WriteString("Hard rules: no explanation, no preamble, no commentary, no markdown fences — ")
 	b.WriteString("output exactly what should replace the region and nothing else. ")
 	b.WriteString("If the instruction means the code should be removed, output nothing at all.\n\n")
