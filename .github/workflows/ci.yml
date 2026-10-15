@@ -1,0 +1,14 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: BananaLabs-OSS/.github/.github/workflows/go-ci.yml@a4b55e64f0ce6de94eddb45f13a57b3458f6f9bb
